@@ -22,6 +22,7 @@ set(KERNEL_SOURCES
     kernel/serial.c
     kernel/log.c
     kernel/mem.c
+    kernel/printf.c
     kernel/kernel.c
 )
 

@@ -3,6 +3,7 @@
 #include "kernel/log.h"
 #include "kernel/panic.h"
 #include "kernel/serial.h"
+#include "kernel/mmu.h"
 
 #include <stdint.h>
 #include <stddef.h>
@@ -31,39 +32,78 @@ struct multiboot_mmap_entry {
     uint32_t zero;
 };
 
-static uint64_t managed_start = 0;
-static uint64_t managed_end = 0;
-static uint64_t bitmap_base = 0;
-static uint64_t managed_pages = 0;
-static uint64_t reserved_pages = 0;
-static uint64_t used_pages = 0;
-static uint64_t total_usable_bytes = 0;
+struct pmm_region {
+    uint64_t phys_start;
+    uint64_t phys_end;
+    uint64_t bitmap_phys;
+    uint64_t bitmap_bytes;
+    uint64_t total_pages;
+    uint64_t reserved_pages;
+};
+
+#define MAX_PMM_REGIONS 32
+
+static struct pmm_region regions[MAX_PMM_REGIONS];
+static uint32_t region_count = 0;
+static uint64_t managed_pages = 0;      /* allocatable pages (excludes metadata) */
+static uint64_t reserved_pages = 0;     /* pages consumed by allocator metadata */
+static uint64_t used_pages = 0;         /* includes reserved + allocations */
 
 static uint64_t align_up(uint64_t value, uint64_t align)
 {
     return (value + align - 1) & ~(align - 1);
 }
 
-static void set_bit(uint64_t idx)
+static uint64_t align_down(uint64_t value, uint64_t align)
 {
-    uint8_t *bitmap = (uint8_t *)bitmap_base;
+    return value & ~(align - 1);
+}
+
+static inline uint8_t *bitmap_virt(const struct pmm_region *region)
+{
+    return (uint8_t *)phys_to_virt(region->bitmap_phys);
+}
+
+static void set_bit(struct pmm_region *region, uint64_t idx)
+{
+    uint8_t *bitmap = bitmap_virt(region);
     bitmap[idx / 8] |= (uint8_t)(1u << (idx % 8));
 }
 
-static void clear_bit(uint64_t idx)
+static void clear_bit(struct pmm_region *region, uint64_t idx)
 {
-    uint8_t *bitmap = (uint8_t *)bitmap_base;
+    uint8_t *bitmap = bitmap_virt(region);
     bitmap[idx / 8] &= (uint8_t)~(1u << (idx % 8));
 }
 
-static int test_bit(uint64_t idx)
+static int test_bit(const struct pmm_region *region, uint64_t idx)
 {
-    uint8_t *bitmap = (uint8_t *)bitmap_base;
+    uint8_t *bitmap = bitmap_virt(region);
     return (bitmap[idx / 8] >> (idx % 8)) & 1u;
 }
 
-static void choose_region(uint64_t info_addr)
+static void add_region(uint64_t start, uint64_t end)
 {
+    if (region_count >= MAX_PMM_REGIONS) {
+        panic("Too many memory regions", region_count);
+    }
+
+    struct pmm_region *region = &regions[region_count++];
+    region->phys_start = start;
+    region->phys_end = end;
+    region->bitmap_phys = 0;
+    region->bitmap_bytes = 0;
+    region->reserved_pages = 0;
+    region->total_pages = (end - start) / 4096;
+}
+
+static void choose_regions(uint64_t info_addr)
+{
+    region_count = 0;
+    managed_pages = 0;
+    reserved_pages = 0;
+    used_pages = 0;
+
     const uint64_t kernel_start_addr = (uint64_t)&_kernel_phys_start;
     const uint64_t kernel_end_addr = (uint64_t)&_kernel_phys_end;
     const uint8_t *info = (const uint8_t *)info_addr;
@@ -71,10 +111,6 @@ static void choose_region(uint64_t info_addr)
     uint32_t total_size = *(const uint32_t *)info;
     const uint8_t *tag_ptr = info + 8; /* skip total_size + reserved */
     const uint8_t *info_end = info + align_up(total_size, 8);
-
-    uint64_t best_start = 0;
-    uint64_t best_end = 0;
-    total_usable_bytes = 0;
 
     while (tag_ptr < info_end) {
         const struct multiboot_tag *tag = (const struct multiboot_tag *)tag_ptr;
@@ -89,24 +125,21 @@ static void choose_region(uint64_t info_addr)
             while (entry_ptr + mmap->entry_size <= mmap_end) {
                 const struct multiboot_mmap_entry *entry = (const struct multiboot_mmap_entry *)entry_ptr;
                 if (entry->type == 1) {
-                    total_usable_bytes += entry->len;
                     uint64_t start = entry->addr;
                     uint64_t end = entry->addr + entry->len;
-                    if (end <= kernel_end_addr) {
+
+                    if (end <= kernel_start_addr) {
                         entry_ptr += mmap->entry_size;
                         continue;
                     }
-                    if (start < kernel_start_addr) {
-                        start = kernel_start_addr;
-                    }
-                    if (start < kernel_end_addr) {
+                    if (start < kernel_end_addr && end > kernel_start_addr) {
                         start = kernel_end_addr;
                     }
+
                     start = align_up(start, 4096);
-                    end &= ~(uint64_t)(4095);
-                    if (end > start && (end - start) > (best_end - best_start)) {
-                        best_start = start;
-                        best_end = end;
+                    end = align_down(end, 4096);
+                    if (end > start) {
+                        add_region(start, end);
                     }
                 }
                 entry_ptr += mmap->entry_size;
@@ -116,65 +149,128 @@ static void choose_region(uint64_t info_addr)
         tag_ptr = (const uint8_t *)align_up((uint64_t)tag_ptr + tag->size, 8);
     }
 
-    if (best_start == 0 || best_end == 0) {
+    if (region_count == 0) {
         panic("No available memory region for allocator", 0);
     }
-
-    managed_start = best_start;
-    managed_end = best_end;
-    managed_pages = (managed_end - managed_start) / 4096;
 }
 
-static void setup_bitmap(void)
+static void setup_bitmaps(void)
 {
-    uint64_t bitmap_bytes = align_up(managed_pages, 8) / 8;
-    bitmap_base = managed_start;
-    uint64_t bitmap_end = align_up(bitmap_base + bitmap_bytes, 4096);
+    managed_pages = 0;
+    reserved_pages = 0;
+    used_pages = 0;
 
-    /* zero bitmap */
-    for (uint64_t i = 0; i < bitmap_bytes; ++i) {
-        ((uint8_t *)bitmap_base)[i] = 0;
+    for (uint32_t i = 0; i < region_count; ++i) {
+        struct pmm_region *region = &regions[i];
+        if (region->total_pages == 0) {
+            continue;
+        }
+
+        region->bitmap_phys = region->phys_start;
+        region->bitmap_bytes = align_up(region->total_pages, 8) / 8;
+        uint64_t bitmap_end = align_up(region->bitmap_phys + region->bitmap_bytes, 4096);
+        region->reserved_pages = (bitmap_end - region->phys_start) / 4096;
+
+        if (region->reserved_pages >= region->total_pages) {
+            region->total_pages = 0;
+            region->reserved_pages = 0;
+            region->bitmap_bytes = 0;
+            continue;
+        }
+
+        uint8_t *bitmap = bitmap_virt(region);
+        for (uint64_t b = 0; b < region->bitmap_bytes; ++b) {
+            bitmap[b] = 0;
+        }
+
+        for (uint64_t page = 0; page < region->reserved_pages; ++page) {
+            set_bit(region, page);
+        }
+
+        reserved_pages += region->reserved_pages;
+        used_pages += region->reserved_pages;
+        managed_pages += (region->total_pages - region->reserved_pages);
     }
 
-    /* mark bitmap storage itself as used */
-    reserved_pages = (bitmap_end - managed_start) / 4096;
-    for (uint64_t i = 0; i < reserved_pages; ++i) {
-        set_bit(i);
+    if (managed_pages == 0) {
+        panic("No allocatable memory after metadata reservation", 0);
     }
-    used_pages = reserved_pages;
+}
+
+static struct pmm_region *find_region(uint64_t addr)
+{
+    for (uint32_t i = 0; i < region_count; ++i) {
+        struct pmm_region *region = &regions[i];
+        if (region->total_pages == 0) {
+            continue;
+        }
+        if (addr >= region->phys_start && addr < region->phys_end) {
+            return region;
+        }
+    }
+    return NULL;
 }
 
 void mem_init(uint64_t multiboot_info)
 {
-    choose_region(multiboot_info);
-    setup_bitmap();
+    choose_regions(multiboot_info);
+    setup_bitmaps();
 
-    console_write("PMM region ");
-    console_write_hex(managed_start);
-    console_write(" - ");
-    console_write_hex(managed_end);
-    console_write("\nTotal usable: ");
-    console_write_hex(total_usable_bytes);
-    console_write(" bytes\n");
+    console_write("PMM regions: ");
+    console_write_hex(region_count);
+    console_write("\nTotal managed bytes: ");
+    console_write_hex(managed_pages * 4096);
+    console_write("\n");
 
-    serial_write("PMM region ");
-    serial_write_hex(managed_start);
-    serial_write(" - ");
-    serial_write_hex(managed_end);
-    serial_write("\r\nTotal usable: ");
-    serial_write_hex(total_usable_bytes);
-    serial_write(" bytes\r\n");
+    serial_write("PMM regions: ");
+    serial_write_hex(region_count);
+    serial_write("\r\nTotal managed bytes: ");
+    serial_write_hex(managed_pages * 4096);
+    serial_write("\r\n");
+
+    for (uint32_t i = 0; i < region_count; ++i) {
+        const struct pmm_region *region = &regions[i];
+        if (region->total_pages == 0) {
+            continue;
+        }
+
+        console_write("Region ");
+        console_write_hex(i);
+        console_write(": ");
+        console_write_hex(region->phys_start);
+        console_write(" - ");
+        console_write_hex(region->phys_end);
+        console_write(" pages=");
+        console_write_hex(region->total_pages - region->reserved_pages);
+        console_write("\n");
+
+        serial_write("Region ");
+        serial_write_hex(i);
+        serial_write(": ");
+        serial_write_hex(region->phys_start);
+        serial_write(" - ");
+        serial_write_hex(region->phys_end);
+        serial_write(" pages=");
+        serial_write_hex(region->total_pages - region->reserved_pages);
+        serial_write("\r\n");
+    }
 
     log_info("Physical memory allocator ready.");
 }
 
 uint64_t pmm_alloc_page(void)
 {
-    for (uint64_t i = reserved_pages; i < managed_pages; ++i) {
-        if (!test_bit(i)) {
-            set_bit(i);
-            ++used_pages;
-            return managed_start + (i * 4096);
+    for (uint32_t r = 0; r < region_count; ++r) {
+        struct pmm_region *region = &regions[r];
+        if (region->total_pages <= region->reserved_pages) {
+            continue;
+        }
+        for (uint64_t i = region->reserved_pages; i < region->total_pages; ++i) {
+            if (!test_bit(region, i)) {
+                set_bit(region, i);
+                ++used_pages;
+                return region->phys_start + (i * 4096);
+            }
         }
     }
     panic("Out of physical memory", 0);
@@ -182,23 +278,28 @@ uint64_t pmm_alloc_page(void)
 
 void pmm_free_page(uint64_t addr)
 {
-    if (addr < managed_start || addr >= managed_end) {
+    struct pmm_region *region = find_region(addr);
+    if (!region) {
         panic("Attempt to free non-managed page", addr);
     }
-    uint64_t idx = (addr - managed_start) / 4096;
-    if (idx < reserved_pages) {
+
+    uint64_t idx = (addr - region->phys_start) / 4096;
+    if (idx >= region->total_pages) {
+        panic("Attempt to free outside region bounds", addr);
+    }
+    if (idx < region->reserved_pages) {
         panic("Attempt to free allocator metadata page", addr);
     }
-    if (!test_bit(idx)) {
+    if (!test_bit(region, idx)) {
         panic("Double free detected", addr);
     }
-    clear_bit(idx);
+    clear_bit(region, idx);
     --used_pages;
 }
 
 uint64_t pmm_total_bytes(void)
 {
-    return total_usable_bytes;
+    return managed_pages * 4096;
 }
 
 uint64_t pmm_used_bytes(void)

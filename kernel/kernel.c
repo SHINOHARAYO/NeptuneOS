@@ -3,10 +3,11 @@
 #include "kernel/log.h"
 #include "kernel/mem.h"
 #include "kernel/panic.h"
+#include "kernel/mmu.h"
 
-#define HIGHER_HALF_BASE 0xFFFFFFFF80000000ULL
 #define VGA_PHYS 0xB8000ULL
 #define VGA_HIGHER_HALF (HIGHER_HALF_BASE + VGA_PHYS)
+#define MULTIBOOT2_MAGIC 0x36D76289U
 
 extern uint64_t pml4_table[];
 
@@ -15,7 +16,7 @@ extern uint64_t pml4_table[];
 static inline void drop_identity_map(void)
 {
     uint64_t phys_pml4 = (uint64_t)pml4_table;
-    uint64_t *pml4_high = (uint64_t *)(phys_pml4 + HIGHER_HALF_BASE);
+    uint64_t *pml4_high = (uint64_t *)phys_to_higher_half(phys_pml4);
     pml4_high[0] = 0;
     __asm__ volatile("mov %0, %%cr3" : : "r"(phys_pml4) : "memory");
 }
@@ -33,8 +34,11 @@ static void trigger_page_fault_test(void)
 
 void kernel_main(uint32_t magic, uint32_t multiboot_info)
 {
-    (void)magic;
-    const uint64_t multiboot_info_high = (uint64_t)multiboot_info + HIGHER_HALF_BASE;
+    if (magic != MULTIBOOT2_MAGIC) {
+        panic("Invalid multiboot2 magic", magic);
+    }
+
+    const uint64_t multiboot_info_high = phys_to_higher_half((uint64_t)multiboot_info);
     volatile uint32_t multiboot_size = *(volatile uint32_t *)multiboot_info_high;
     (void)multiboot_size;
 
@@ -42,13 +46,18 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
     log_init();
     log_set_level(LOG_LEVEL_DEBUG);
     log_info("Booting 64-bit kernel...");
+    log_debug("Multiboot info validated.");
 
+    log_info("Initializing IDT...");
     idt_init();
     log_info("IDT initialized.");
 
+    log_info("Initializing physical memory manager...");
     mem_init(multiboot_info_high);
+    log_info("Physical memory manager initialized.");
 
     /* allocator smoke test */
+    log_debug("Running allocator self-test...");
     uint64_t before = pmm_used_bytes();
     uint64_t p1 = pmm_alloc_page();
     uint64_t p2 = pmm_alloc_page();

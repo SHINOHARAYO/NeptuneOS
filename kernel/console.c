@@ -1,0 +1,71 @@
+#include "kernel/console.h"
+
+#include <stdint.h>
+#include <stddef.h>
+
+#ifndef VGA_BUFFER_ADDR
+#define VGA_BUFFER_ADDR 0xFFFFFFFF800B8000ULL
+#endif
+
+static volatile uint16_t *const vga_buffer = (uint16_t *)VGA_BUFFER_ADDR;
+static uint8_t current_color = 0x1F; /* white on blue */
+static uint8_t cursor_row = 0;
+static uint8_t cursor_col = 0;
+
+static void advance_cursor(void)
+{
+    ++cursor_col;
+    if (cursor_col >= 80) {
+        cursor_col = 0;
+        ++cursor_row;
+    }
+}
+
+static void put_char(char c)
+{
+    if (c == '\n') {
+        cursor_col = 0;
+        ++cursor_row;
+        return;
+    }
+
+    const size_t index = (cursor_row * 80) + cursor_col;
+    vga_buffer[index] = ((uint16_t)current_color << 8) | (uint8_t)c;
+    advance_cursor();
+}
+
+void console_clear(uint8_t color)
+{
+    current_color = color;
+    cursor_row = 0;
+    cursor_col = 0;
+    for (size_t i = 0; i < 80 * 25; ++i) {
+        vga_buffer[i] = ((uint16_t)current_color << 8) | ' ';
+    }
+}
+
+void console_set_color(uint8_t color)
+{
+    current_color = color;
+}
+
+void console_write(const char *msg)
+{
+    for (size_t i = 0; msg[i] != '\0'; ++i) {
+        put_char(msg[i]);
+    }
+}
+
+static char hex_digit(uint8_t value)
+{
+    return value < 10 ? ('0' + value) : ('A' + (value - 10));
+}
+
+void console_write_hex(uint64_t value)
+{
+    console_write("0x");
+    for (int shift = 60; shift >= 0; shift -= 4) {
+        uint8_t nibble = (value >> shift) & 0xF;
+        put_char(hex_digit(nibble));
+    }
+}

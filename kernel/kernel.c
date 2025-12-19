@@ -9,6 +9,8 @@
 #define VGA_HIGHER_HALF (HIGHER_HALF_BASE + VGA_PHYS)
 #define MULTIBOOT2_MAGIC 0x36D76289U
 
+#define ENABLE_NX_TEST 0
+
 extern uint64_t pml4_table[];
 
 #define ENABLE_FAULT_TEST 0
@@ -63,6 +65,16 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
     log_info("Extending higher-half direct map...");
     mmu_map_hhdm_2m(0, max_phys);
     log_info("Higher-half direct map updated.");
+    log_info("Applying kernel section protections...");
+    mmu_protect_kernel_sections();
+    log_info("Kernel sections protected.");
+    #if ENABLE_NX_TEST
+    log_info("Running NX self-test (expect page fault)...");
+    uint64_t nx_page = pmm_alloc_page();
+    uint8_t *nx_virt = (uint8_t *)mmu_kmap(nx_page, MMU_FLAG_WRITE | MMU_FLAG_NOEXEC);
+    nx_virt[0] = 0xC3; /* ret */
+    __asm__ volatile("call *%0" : : "r"(nx_virt) : "memory"); /* should fault on instruction fetch */
+    #endif
     log_debug_hex("PMM total bytes", pmm_total_bytes());
     log_debug_hex("PMM used bytes", pmm_used_bytes());
 

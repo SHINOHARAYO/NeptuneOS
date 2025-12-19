@@ -8,6 +8,7 @@
 #define MMU_FLAG_WRITE 0x2ULL
 #define MMU_FLAG_USER  0x4ULL
 #define MMU_FLAG_NOEXEC (1ULL << 63)
+#define MMU_FLAG_GLOBAL (1ULL << 8)
 
 static inline uint64_t phys_to_higher_half(uint64_t phys)
 {
@@ -48,3 +49,14 @@ void mmu_unmap_page(uint64_t virt);
 
 /* Reload CR3 to flush TLB entries after page table changes. */
 void mmu_reload_cr3(void);
+
+/* Apply proper permissions to kernel sections (text RX, rodata RO/NX, data/bss RW/NX). */
+void mmu_protect_kernel_sections(void);
+
+/* Map a kernel linear address in the higher half for a given phys; allocates tables as needed. */
+static inline void *mmu_kmap(uint64_t phys, uint64_t flags)
+{
+    void *virt = (void *)phys_to_higher_half(phys);
+    mmu_map_page((uint64_t)virt, phys, flags);
+    return virt;
+}

@@ -83,7 +83,17 @@ static uint64_t *ensure_table(uint64_t *parent, uint16_t index, uint64_t flags)
     uint64_t entry = parent[index];
     uint64_t phys;
     if (entry & PTE_PS) {
-        panic("Cannot split huge page", entry);
+        /* split 2MiB page into 4KiB PTEs using existing flags */
+        uint64_t base = entry & ~((1ULL << 21) - 1);
+        uint64_t flags_keep = entry & ~(PTE_PS);
+        phys = pmm_alloc_page();
+        uint64_t *pt = (uint64_t *)table_ptr(phys);
+        for (uint64_t i = 0; i < 512; ++i) {
+            uint64_t pte = (base + (i * 4096)) | flags_keep;
+            pt[i] = pte;
+        }
+        parent[index] = phys | (flags_keep & ~0xFFFULL) | PTE_PRESENT | PTE_RW | (flags_keep & (PTE_USER | (1ULL << 8) | (1ULL << 63)));
+        return pt;
     }
     if (!(entry & PTE_PRESENT)) {
         phys = pmm_alloc_page();
@@ -159,7 +169,10 @@ void mmu_map_page(uint64_t virt, uint64_t phys, uint64_t flags)
 
     uint64_t existing = pt[pt_index];
     if (existing & PTE_PRESENT) {
-        panic("mmu_map_page: already mapped", existing);
+        uint64_t existing_phys = existing & ~0xFFFULL;
+        if (existing_phys != (phys & ~0xFFFULL)) {
+            panic("mmu_map_page: remap to different phys", existing);
+        }
     }
 
     uint64_t entry = (phys & ~0xFFFULL) | PTE_PRESENT;
@@ -169,7 +182,12 @@ void mmu_map_page(uint64_t virt, uint64_t phys, uint64_t flags)
     if (flags & MMU_FLAG_USER) {
         entry |= PTE_USER;
     }
-    /* NX bit intentionally ignored until EFER.NXE is enabled */
+    if (flags & MMU_FLAG_GLOBAL) {
+        entry |= (1ULL << 8);
+    }
+    if (flags & MMU_FLAG_NOEXEC) {
+        entry |= (1ULL << 63);
+    }
 
     pt[pt_index] = entry;
     invlpg(virt);
@@ -212,4 +230,47 @@ void mmu_unmap_page(uint64_t virt)
 
     pt[pt_index] = 0;
     invlpg(virt);
+}
+
+static inline uint64_t align_down_4k(uint64_t value) { return value & ~0xFFFULL; }
+static inline uint64_t align_up_4k(uint64_t value) { return (value + 0xFFFULL) & ~0xFFFULL; }
+
+void mmu_protect_kernel_sections(void)
+{
+    extern char _text_start, _text_end;
+    extern char _rodata_start, _rodata_end;
+    extern char _data_start, _data_end;
+    extern char _bss_start, _bss_end;
+
+    const uint64_t text_phys_start = virt_to_phys(&_text_start);
+    const uint64_t text_phys_end = virt_to_phys(&_text_end);
+    const uint64_t rodata_phys_start = virt_to_phys(&_rodata_start);
+    const uint64_t rodata_phys_end = virt_to_phys(&_rodata_end);
+    const uint64_t data_phys_start = virt_to_phys(&_data_start);
+    const uint64_t data_phys_end = virt_to_phys(&_data_end);
+    const uint64_t bss_phys_start = virt_to_phys(&_bss_start);
+    const uint64_t bss_phys_end = virt_to_phys(&_bss_end);
+
+    uint64_t text_flags = MMU_FLAG_GLOBAL; /* RX */
+    uint64_t ro_flags = MMU_FLAG_GLOBAL | MMU_FLAG_NOEXEC; /* RO, NX */
+    uint64_t data_flags = MMU_FLAG_GLOBAL | MMU_FLAG_WRITE | MMU_FLAG_NOEXEC;
+
+    for (uint64_t phys = align_down_4k(text_phys_start); phys < align_up_4k(text_phys_end); phys += 4096) {
+        uint64_t virt = phys_to_higher_half(phys);
+        mmu_map_page(virt, phys, text_flags);
+    }
+    for (uint64_t phys = align_down_4k(rodata_phys_start); phys < align_up_4k(rodata_phys_end); phys += 4096) {
+        uint64_t virt = phys_to_higher_half(phys);
+        mmu_map_page(virt, phys, ro_flags);
+    }
+    for (uint64_t phys = align_down_4k(data_phys_start); phys < align_up_4k(data_phys_end); phys += 4096) {
+        uint64_t virt = phys_to_higher_half(phys);
+        mmu_map_page(virt, phys, data_flags);
+    }
+    for (uint64_t phys = align_down_4k(bss_phys_start); phys < align_up_4k(bss_phys_end); phys += 4096) {
+        uint64_t virt = phys_to_higher_half(phys);
+        mmu_map_page(virt, phys, data_flags);
+    }
+
+    mmu_reload_cr3();
 }

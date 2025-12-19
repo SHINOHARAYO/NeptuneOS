@@ -59,12 +59,15 @@ _start:
 
     mov $0xC0000080, %ecx
     rdmsr
-    or $0x00000100, %eax              # enable LME
+    or $0x00000900, %eax              # enable LME | NXE
     wrmsr
 
     mov %cr0, %eax
     or $0x80000001, %eax              # enable paging + protection
     mov %eax, %cr0
+    mov %cr4, %eax
+    or $(1 << 7), %eax                # enable global pages for TLB
+    mov %eax, %cr4
 
     ljmp $0x08, $long_mode_entry      # far jump flushes pipeline into long mode
 
@@ -204,6 +207,12 @@ setup_paging:
     or $0x3, %eax
     mov %eax, pdpt_higher + (510 * 8)
     movl $0, pdpt_higher + (510 * 8) + 4
+
+    # Map VGA text buffer (0xB8000) into higher half via pml4[511]/pdpt_higher[511], 2MiB page
+    mov $pd_higher_extra, %eax
+    or $0x3, %eax
+    mov %eax, pdpt_higher + (511 * 8)
+    movl $0, pdpt_higher + (511 * 8) + 4
 
     # identity map first GiB with 2MiB pages
     lea pd_identity, %edi

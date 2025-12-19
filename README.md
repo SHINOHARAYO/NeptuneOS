@@ -4,10 +4,12 @@ Tiny higher-half x86_64 hobby kernel with Multiboot2 boot, GRUB ISO image, VGA c
 
 ## Features
 - Multiboot2 header and higher-half paging (identity dropped after bootstrapping).
-- GDT/IDT setup with basic exception handlers and panic flow.
+- GDT rebuilt on the heap (with TSS) and IDT rebuilt on the heap; basic exception handlers and panic flow.
 - VGA text console with scrolling and COM1 serial logging.
 - Physical memory manager using per-region bitmaps (handles multiple E820 ranges).
-- Simple allocator self-test at boot with verbose logs.
+- Kernel heap with slab/large allocs, free coalescing, stats dump, and self-tests.
+- PIC remap + PIT timer ticks with IRQ handlers; keyboard and COM1 IRQ stubs unmasked.
+- Simple allocator self-test and timer tick validation at boot with verbose logs.
 
 ## Prerequisites
 - CMake 3.16+
@@ -31,10 +33,12 @@ Console logs appear on VGA; duplicate logs are emitted to the serial port (shown
 
 ## Layout
 - `kernel/boot/boot.s` – Multiboot2 header, early 32-bit entry, paging bootstrap to long mode.
-- `kernel/arch/x86_64` – IDT, paging, and GDT helpers.
+- `kernel/arch/x86_64` – GDT/IDT, paging, PIC/PIT setup, IRQ stubs.
 - `kernel/console.c`, `kernel/serial.c`, `kernel/log.c` – VGA/serial output and logging.
 - `kernel/mem.c` – Physical memory manager (per-region bitmaps), PMM stats helpers.
-- `kernel/kernel.c` – Higher-half entry, init sequence, allocator self-test.
+- `kernel/heap.c` – Kernel heap with slab/large buckets, coalescing, stats, and verification.
+- `kernel/timer.c` – Tick counter and callback hooks driven by PIT IRQ.
+- `kernel/kernel.c` – Higher-half entry, init sequence, allocator/timer self-tests.
 - `linker.ld` – Higher-half linker script with low bootstrap sections.
 - `grub/grub.cfg` – GRUB boot menu for the ISO.
 

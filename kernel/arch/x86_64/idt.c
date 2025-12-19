@@ -38,12 +38,12 @@ static struct idt_entry idt_boot[256] __attribute__((aligned(16)));
 static struct idt_entry *idt_table = idt_boot;
 static const uint16_t idt_limit = (uint16_t)(sizeof(struct idt_entry) * 256 - 1);
 
-static void set_gate(uint8_t vec, uint64_t handler)
+static void set_gate(uint8_t vec, uint64_t handler, uint8_t ist)
 {
     const uint64_t addr = handler;
     idt_table[vec].offset_low = addr & 0xFFFF;
     idt_table[vec].selector = 0x08;
-    idt_table[vec].ist = 0;
+    idt_table[vec].ist = ist & 0x7;
     idt_table[vec].type_attr = 0x8E;
     idt_table[vec].offset_mid = (addr >> 16) & 0xFFFF;
     idt_table[vec].offset_high = (addr >> 32) & 0xFFFFFFFF;
@@ -307,34 +307,49 @@ uint64_t idt_get_timer_ticks(void)
     return timer_get_ticks();
 }
 
+__attribute__((interrupt)) static void isr_spurious_master(struct interrupt_frame *frame)
+{
+    (void)frame;
+    /* Do not EOI; this IRQ was likely noise on IRQ7/15 after masking. */
+}
+
+__attribute__((interrupt)) static void isr_spurious_slave(struct interrupt_frame *frame)
+{
+    (void)frame;
+    /* Spurious on slave: EOI master only if ISR on master shows in-service. */
+    outb(0x20, 0x20);
+}
+
 static void idt_build(void)
 {
     for (uint16_t i = 0; i < 256; ++i) {
-        set_gate((uint8_t)i, (uint64_t)isr_default);
+        set_gate((uint8_t)i, (uint64_t)isr_default, 0);
     }
 
-    set_gate(0, (uint64_t)isr_divide_error);
-    set_gate(1, (uint64_t)isr_debug);
-    set_gate(2, (uint64_t)isr_nmi);
-    set_gate(3, (uint64_t)isr_breakpoint);
-    set_gate(4, (uint64_t)isr_overflow);
-    set_gate(5, (uint64_t)isr_bound_range);
-    set_gate(6, (uint64_t)isr_invalid_opcode);
-    set_gate(7, (uint64_t)isr_device_not_available);
-    set_gate(8, (uint64_t)isr_double_fault);
-    set_gate(10, (uint64_t)isr_invalid_tss);
-    set_gate(11, (uint64_t)isr_segment_not_present);
-    set_gate(12, (uint64_t)isr_stack_segment_fault);
-    set_gate(13, (uint64_t)isr_general_protection);
-    set_gate(14, (uint64_t)isr_page_fault);
-    set_gate(16, (uint64_t)isr_x87_fpu_error);
-    set_gate(17, (uint64_t)isr_alignment_check);
-    set_gate(18, (uint64_t)isr_machine_check);
-    set_gate(19, (uint64_t)isr_simd);
-    set_gate(20, (uint64_t)isr_virtualization);
-    set_gate(32, (uint64_t)isr_irq0);
-    set_gate(33, (uint64_t)isr_irq1);
-    set_gate(36, (uint64_t)isr_irq4);
+    set_gate(0, (uint64_t)isr_divide_error, 0);
+    set_gate(1, (uint64_t)isr_debug, 0);
+    set_gate(2, (uint64_t)isr_nmi, 0);
+    set_gate(3, (uint64_t)isr_breakpoint, 0);
+    set_gate(4, (uint64_t)isr_overflow, 0);
+    set_gate(5, (uint64_t)isr_bound_range, 0);
+    set_gate(6, (uint64_t)isr_invalid_opcode, 0);
+    set_gate(7, (uint64_t)isr_device_not_available, 0);
+    set_gate(8, (uint64_t)isr_double_fault, 0);
+    set_gate(10, (uint64_t)isr_invalid_tss, 0);
+    set_gate(11, (uint64_t)isr_segment_not_present, 0);
+    set_gate(12, (uint64_t)isr_stack_segment_fault, 0);
+    set_gate(13, (uint64_t)isr_general_protection, 0);
+    set_gate(14, (uint64_t)isr_page_fault, 0);
+    set_gate(16, (uint64_t)isr_x87_fpu_error, 0);
+    set_gate(17, (uint64_t)isr_alignment_check, 0);
+    set_gate(18, (uint64_t)isr_machine_check, 0);
+    set_gate(19, (uint64_t)isr_simd, 0);
+    set_gate(20, (uint64_t)isr_virtualization, 0);
+    set_gate(32, (uint64_t)isr_irq0, 1);
+    set_gate(33, (uint64_t)isr_irq1, 1);
+    set_gate(36, (uint64_t)isr_irq4, 1);
+    set_gate(0x27, (uint64_t)isr_spurious_master, 0);
+    set_gate(0x2F, (uint64_t)isr_spurious_slave, 0);
 }
 
 void idt_init(void)

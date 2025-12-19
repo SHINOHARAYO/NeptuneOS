@@ -1,7 +1,6 @@
 #include "kernel/gdt.h"
 #include "kernel/heap.h"
 #include "kernel/log.h"
-#include "kernel/io.h"
 
 #include <stdint.h>
 #include <stddef.h>
@@ -59,6 +58,16 @@ void gdt_relocate_heap(void)
     __asm__ volatile("mov %%rsp, %0" : "=r"(stack_ptr));
     tss_kernel.rsp0 = stack_ptr;
     tss_kernel.iomap_base = sizeof(struct tss64);
+    /* allocate dedicated IST stacks for IRQs */
+    const size_t ist_stack_size = 4096;
+    uint8_t *ist1 = (uint8_t *)kalloc_zero(ist_stack_size, 16);
+    uint8_t *ist2 = (uint8_t *)kalloc_zero(ist_stack_size, 16);
+    if (!ist1 || !ist2) {
+        log_error("Failed to allocate IST stacks");
+    } else {
+        tss_kernel.ist1 = (uint64_t)(ist1 + ist_stack_size);
+        tss_kernel.ist2 = (uint64_t)(ist2 + ist_stack_size);
+    }
 
     uint64_t tss_base = (uint64_t)&tss_kernel;
     uint32_t tss_limit = (uint32_t)(sizeof(struct tss64) - 1);

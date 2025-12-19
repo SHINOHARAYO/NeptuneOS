@@ -61,3 +61,31 @@ void log_debug(const char *msg) { log_emit(LOG_LEVEL_DEBUG, msg); }
 void log_info(const char *msg) { log_emit(LOG_LEVEL_INFO, msg); }
 void log_warn(const char *msg) { log_emit(LOG_LEVEL_WARN, msg); }
 void log_error(const char *msg) { log_emit(LOG_LEVEL_ERROR, msg); }
+
+static void log_emit_hex(enum log_level level, const char *label, uint64_t value)
+{
+    if (level < current_level) {
+        return;
+    }
+
+    write_prefix(level);
+    console_write(label);
+    console_write(": ");
+    console_write_hex(value);
+    console_write("\n");
+
+    serial_write(label);
+    serial_write(": ");
+    serial_write_hex(value);
+    serial_write("\n");
+}
+
+void log_debug_hex(const char *label, uint64_t value)
+{
+    log_emit_hex(LOG_LEVEL_DEBUG, label, value);
+}
+
+void log_info_hex(const char *label, uint64_t value)
+{
+    log_emit_hex(LOG_LEVEL_INFO, label, value);
+}

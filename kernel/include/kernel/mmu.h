@@ -3,6 +3,11 @@
 #include <stdint.h>
 
 #define HIGHER_HALF_BASE 0xFFFFFFFF80000000ULL
+#define HHDM_BASE 0xFFFF800000000000ULL
+
+#define MMU_FLAG_WRITE 0x2ULL
+#define MMU_FLAG_USER  0x4ULL
+#define MMU_FLAG_NOEXEC (1ULL << 63)
 
 static inline uint64_t phys_to_higher_half(uint64_t phys)
 {
@@ -23,3 +28,23 @@ static inline uint64_t virt_to_phys(const void *virt)
 {
     return higher_half_to_phys((uint64_t)virt);
 }
+
+static inline uint64_t phys_to_hhdm(uint64_t phys)
+{
+    return phys + HHDM_BASE;
+}
+
+static inline uint64_t hhdm_to_phys(uint64_t virt)
+{
+    return virt - HHDM_BASE;
+}
+
+/* Map physical range into the HHDM using 2 MiB pages. */
+void mmu_map_hhdm_2m(uint64_t phys_start, uint64_t phys_end);
+
+/* Map/unmap a single 4 KiB page. Flags use MMU_FLAG_* above (present is implied). */
+void mmu_map_page(uint64_t virt, uint64_t phys, uint64_t flags);
+void mmu_unmap_page(uint64_t virt);
+
+/* Reload CR3 to flush TLB entries after page table changes. */
+void mmu_reload_cr3(void);

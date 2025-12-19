@@ -30,6 +30,11 @@ multiboot2_header_end:
 .globl multiboot_magic32
 .globl multiboot_info32
 .globl pml4_table
+.globl pdpt_identity
+.globl pdpt_higher
+.globl pd_identity
+.globl pd_higher
+.globl pd_higher_extra
 
 .equ VGA_PHYS, 0xB8000
 
@@ -88,6 +93,14 @@ long_mode_entry:
     mov %ax, %fs
     mov %ax, %gs
 
+    /* Zero .bss */
+    xor %rax, %rax
+    lea _bss_start(%rip), %rdi
+    lea _bss_end(%rip), %rcx
+    sub %rdi, %rcx
+    shr $3, %rcx
+    rep stosq
+
     /* Pass multiboot info, already low identity; kernel will consume high mapping */
     mov multiboot_magic32(%rip), %edi
     mov multiboot_info32(%rip), %esi
@@ -137,6 +150,9 @@ pd_identity:
     .fill 512, 8, 0
 .align 4096
 pd_higher:
+    .fill 512, 8, 0
+.align 4096
+pd_higher_extra:
     .fill 512, 8, 0
 
 .section .text.boot,"ax"

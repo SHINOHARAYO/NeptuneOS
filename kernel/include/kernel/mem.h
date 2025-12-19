@@ -7,3 +7,4 @@ uint64_t pmm_alloc_page(void);
 void pmm_free_page(uint64_t addr);
 uint64_t pmm_total_bytes(void);
 uint64_t pmm_used_bytes(void);
+uint64_t pmm_max_phys_addr(void);

@@ -13,6 +13,8 @@ extern char _kernel_start;
 extern char _kernel_phys_start;
 extern char _kernel_phys_end;
 
+#define META_REGION_LIMIT (1ULL << 30) /* prefer metadata below 1 GiB */
+
 struct multiboot_tag {
     uint32_t type;
     uint32_t size;
@@ -48,6 +50,7 @@ static uint32_t region_count = 0;
 static uint64_t managed_pages = 0;      /* allocatable pages (excludes metadata) */
 static uint64_t reserved_pages = 0;     /* pages consumed by allocator metadata */
 static uint64_t used_pages = 0;         /* includes reserved + allocations */
+static uint64_t max_phys_end = 0;       /* highest address of any managed region */
 
 static uint64_t align_up(uint64_t value, uint64_t align)
 {
@@ -103,6 +106,7 @@ static void choose_regions(uint64_t info_addr)
     managed_pages = 0;
     reserved_pages = 0;
     used_pages = 0;
+    max_phys_end = 0;
 
     const uint64_t kernel_start_addr = (uint64_t)&_kernel_phys_start;
     const uint64_t kernel_end_addr = (uint64_t)&_kernel_phys_end;
@@ -140,6 +144,9 @@ static void choose_regions(uint64_t info_addr)
                     end = align_down(end, 4096);
                     if (end > start) {
                         add_region(start, end);
+                        if (end > max_phys_end) {
+                            max_phys_end = end;
+                        }
                     }
                 }
                 entry_ptr += mmap->entry_size;
@@ -160,27 +167,77 @@ static void setup_bitmaps(void)
     reserved_pages = 0;
     used_pages = 0;
 
+    /* first pass: total bitmap space required */
+    uint64_t total_bitmap_bytes = 0;
+    for (uint32_t i = 0; i < region_count; ++i) {
+        const struct pmm_region *region = &regions[i];
+        if (region->total_pages == 0) {
+            continue;
+        }
+        total_bitmap_bytes += align_up(region->total_pages, 8) / 8;
+    }
+
+    /* choose a low region already covered by the initial 1GiB direct map */
+    struct pmm_region *meta_region = NULL;
+    for (uint32_t i = 0; i < region_count; ++i) {
+        struct pmm_region *region = &regions[i];
+        if (region->total_pages == 0) {
+            continue;
+        }
+        if (region->phys_start >= META_REGION_LIMIT) {
+            continue;
+        }
+        uint64_t aligned_start = align_up(region->phys_start, 4096);
+        uint64_t usable_bytes = region->phys_end - aligned_start;
+        if (usable_bytes < total_bitmap_bytes) {
+            continue;
+        }
+        if (!meta_region || region->phys_start < meta_region->phys_start) {
+            meta_region = region;
+        }
+    }
+
+    if (!meta_region) {
+        panic("No low memory for allocator metadata", total_bitmap_bytes);
+    }
+
+    uint64_t meta_cursor = align_up(meta_region->phys_start, 4096);
+    uint64_t meta_limit = meta_region->phys_end;
+    if (meta_cursor + total_bitmap_bytes > meta_limit) {
+        panic("Insufficient low memory for allocator metadata", total_bitmap_bytes);
+    }
+    log_debug("Selected PMM metadata region in low memory");
+    log_debug_hex("Metadata region start", meta_region->phys_start);
+    log_debug_hex("Metadata region end", meta_region->phys_end);
+    log_debug_hex("Metadata bytes needed", total_bitmap_bytes);
+
     for (uint32_t i = 0; i < region_count; ++i) {
         struct pmm_region *region = &regions[i];
         if (region->total_pages == 0) {
             continue;
         }
 
-        region->bitmap_phys = region->phys_start;
+        region->bitmap_phys = meta_cursor;
         region->bitmap_bytes = align_up(region->total_pages, 8) / 8;
-        uint64_t bitmap_end = align_up(region->bitmap_phys + region->bitmap_bytes, 4096);
-        region->reserved_pages = (bitmap_end - region->phys_start) / 4096;
-
-        if (region->reserved_pages >= region->total_pages) {
-            region->total_pages = 0;
-            region->reserved_pages = 0;
-            region->bitmap_bytes = 0;
-            continue;
-        }
+        region->reserved_pages = 0; /* metadata lives in meta_region */
+        meta_cursor += region->bitmap_bytes;
 
         uint8_t *bitmap = bitmap_virt(region);
         for (uint64_t b = 0; b < region->bitmap_bytes; ++b) {
             bitmap[b] = 0;
+        }
+    }
+
+    /* reserve pages consumed by the shared metadata pool */
+    uint64_t metadata_bytes = align_up(meta_cursor - meta_region->phys_start, 4096);
+    meta_region->reserved_pages = metadata_bytes / 4096;
+    log_debug_hex("Metadata bytes reserved", metadata_bytes);
+    log_debug_hex("Metadata pages reserved", meta_region->reserved_pages);
+
+    for (uint32_t i = 0; i < region_count; ++i) {
+        struct pmm_region *region = &regions[i];
+        if (region->total_pages == 0) {
+            continue;
         }
 
         for (uint64_t page = 0; page < region->reserved_pages; ++page) {
@@ -305,4 +362,9 @@ uint64_t pmm_total_bytes(void)
 uint64_t pmm_used_bytes(void)
 {
     return used_pages * 4096;
+}
+
+uint64_t pmm_max_phys_addr(void)
+{
+    return max_phys_end;
 }

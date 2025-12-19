@@ -7,3 +7,4 @@ extern uint64_t pdpt_identity[];
 extern uint64_t pdpt_higher[];
 extern uint64_t pd_identity[];
 extern uint64_t pd_higher[];
+extern uint64_t pd_higher_extra[];

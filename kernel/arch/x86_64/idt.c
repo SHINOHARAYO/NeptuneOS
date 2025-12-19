@@ -2,6 +2,7 @@
 #include "kernel/panic.h"
 #include "kernel/console.h"
 #include "kernel/serial.h"
+#include "kernel/mmu.h"
 
 #include <stdint.h>
 
@@ -60,6 +61,96 @@ static inline uint64_t read_cr2(void)
     uint64_t value;
     __asm__ volatile("mov %%cr2, %0" : "=r"(value));
     return value;
+}
+
+static void write_both(const char *label, uint64_t value)
+{
+    console_write(label);
+    console_write_hex(value);
+    console_write("\n");
+    serial_write(label);
+    serial_write_hex(value);
+    serial_write("\r\n");
+}
+
+static void log_page_fault_details(uint64_t cr2, uint64_t err)
+{
+    console_set_color(0x4F);
+    console_write("PAGE FAULT @");
+    console_write_hex(cr2);
+    console_write(" ERR=");
+    console_write_hex(err);
+    console_write(" [");
+    console_write((err & 1) ? "P" : "NP");
+    console_write((err & (1 << 1)) ? " W" : " R");
+    console_write((err & (1 << 2)) ? " U" : " S");
+    if (err & (1 << 4)) {
+        console_write(" IX");
+    } else {
+        console_write(" DATA");
+    }
+    if (err & (1 << 3)) {
+        console_write(" RSVD");
+    }
+    if (err & (1 << 6)) {
+        console_write(" SS");
+    }
+    console_write(" ]\n");
+
+    serial_write("PAGE FAULT @");
+    serial_write_hex(cr2);
+    serial_write(" ERR=");
+    serial_write_hex(err);
+    serial_write(" [");
+    serial_write((err & 1) ? "P" : "NP");
+    serial_write((err & (1 << 1)) ? " W" : " R");
+    serial_write((err & (1 << 2)) ? " U" : " S");
+    if (err & (1 << 4)) {
+        serial_write(" IX");
+    } else {
+        serial_write(" DATA");
+    }
+    if (err & (1 << 3)) {
+        serial_write(" RSVD");
+    }
+    if (err & (1 << 6)) {
+        serial_write(" SS");
+    }
+    serial_write(" ]\r\n");
+
+    const uint16_t pml4_index = (cr2 >> 39) & 0x1FF;
+    const uint16_t pdpt_index = (cr2 >> 30) & 0x1FF;
+    const uint16_t pd_index = (cr2 >> 21) & 0x1FF;
+    const uint16_t pt_index = (cr2 >> 12) & 0x1FF;
+
+    uint64_t *pml4 = (uint64_t *)phys_to_hhdm((uint64_t)pml4_table);
+    uint64_t pml4e = pml4[pml4_index];
+    write_both("PML4E=", pml4e);
+
+    if (pml4e & 1) {
+        uint64_t *pdpt = (uint64_t *)phys_to_hhdm(pml4e & ~0xFFFULL);
+        uint64_t pdpte = pdpt[pdpt_index];
+        write_both("PDPTE=", pdpte);
+
+        if (pdpte & 1) {
+            if (pdpte & (1ULL << 7)) {
+                write_both("PDPE 1G=", pdpte);
+            } else {
+                uint64_t *pd = (uint64_t *)phys_to_hhdm(pdpte & ~0xFFFULL);
+                uint64_t pde = pd[pd_index];
+                write_both("PDE=", pde);
+                if (pde & 1) {
+                    if (pde & (1ULL << 7)) {
+                        write_both("PDE 2M=", pde);
+                    } else {
+                        uint64_t *pt = (uint64_t *)phys_to_hhdm(pde & ~0xFFFULL);
+                        uint64_t pte = pt[pt_index];
+                        write_both("PTE=", pte);
+                    }
+                }
+            }
+        }
+    }
 }
 
 static void dump_regs(struct interrupt_frame *frame, uint64_t err, uint64_t cr2, uint8_t vec, uint8_t has_err)
@@ -152,6 +243,9 @@ static void exception_handler(const char *label, uint8_t vec, uint64_t err, uint
     log_exception(label, vec, err, has_err, rip);
 
     uint64_t cr2 = (vec == 14) ? read_cr2() : 0;
+    if (vec == 14) {
+        log_page_fault_details(cr2, err);
+    }
     dump_regs(frame, err, cr2, vec, has_err);
 
     panic(label, code ? code : cr2);

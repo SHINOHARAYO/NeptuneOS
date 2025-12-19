@@ -38,8 +38,8 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
         panic("Invalid multiboot2 magic", magic);
     }
 
-    const uint64_t multiboot_info_high = phys_to_higher_half((uint64_t)multiboot_info);
-    volatile uint32_t multiboot_size = *(volatile uint32_t *)multiboot_info_high;
+    const uint64_t multiboot_info_phys = (uint64_t)multiboot_info;
+    volatile uint32_t multiboot_size = *(volatile uint32_t *)multiboot_info_phys; /* identity-mapped early */
     (void)multiboot_size;
 
     console_clear(0x1F); /* white on blue */
@@ -47,14 +47,24 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
     log_set_level(LOG_LEVEL_DEBUG);
     log_info("Booting 64-bit kernel...");
     log_debug("Multiboot info validated.");
+    log_debug_hex("Multiboot2 info size", multiboot_size);
+    log_debug_hex("Multiboot2 info phys", multiboot_info_phys);
 
     log_info("Initializing IDT...");
     idt_init();
     log_info("IDT initialized.");
 
     log_info("Initializing physical memory manager...");
-    mem_init(multiboot_info_high);
+    mem_init(multiboot_info_phys);
     log_info("Physical memory manager initialized.");
+    uint64_t max_phys = pmm_max_phys_addr();
+    log_info_hex("Maximum managed physical address", max_phys);
+
+    log_info("Extending higher-half direct map...");
+    mmu_map_hhdm_2m(0, max_phys);
+    log_info("Higher-half direct map updated.");
+    log_debug_hex("PMM total bytes", pmm_total_bytes());
+    log_debug_hex("PMM used bytes", pmm_used_bytes());
 
     /* allocator smoke test */
     log_debug("Running allocator self-test...");

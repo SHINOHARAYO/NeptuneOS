@@ -15,6 +15,7 @@ set(KERNEL_SOURCES
     kernel/boot/boot.s
     kernel/arch/x86_64/gdt.s
     kernel/arch/x86_64/gdt.c
+    kernel/arch/x86_64/mmu.c
     kernel/arch/x86_64/paging.c
     kernel/arch/x86_64/idt.c
     kernel/console.c

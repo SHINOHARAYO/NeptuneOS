@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 extern uint64_t pml4_table[];
 
@@ -16,8 +17,13 @@ extern uint64_t pml4_table[];
 #define PAGE_SIZE_2M (1ULL << 21)
 #define HHDM_PML4_INDEX ((HHDM_BASE >> 39) & 0x1FF)
 
+static bool hhdm_ready = false;
+
 static inline void *table_ptr(uint64_t phys)
 {
+    if (hhdm_ready) {
+        return (void *)phys_to_hhdm(phys);
+    }
     return (void *)phys_to_higher_half(phys);
 }
 
@@ -144,11 +150,12 @@ void mmu_map_hhdm_2m(uint64_t phys_start, uint64_t phys_end)
 
         uint64_t *pd = ensure_hhdm_pd(pdpt, pdpt_index);
 
-        uint64_t entry = align_down(phys, PAGE_SIZE_2M) | PTE_PRESENT | PTE_RW | PTE_PS;
+        uint64_t entry = align_down(phys, PAGE_SIZE_2M) | PTE_PRESENT | PTE_RW | PTE_PS | (1ULL << 63); /* NX */
         pd[pd_index] = entry;
     }
 
     mmu_reload_cr3(); /* flush after updates */
+    hhdm_ready = true;
 }
 
 void mmu_map_page(uint64_t virt, uint64_t phys, uint64_t flags)

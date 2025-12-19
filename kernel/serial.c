@@ -30,7 +30,8 @@ void serial_init(void)
     outb(COM1_PORT + 1, 0x00);    /* divisor high */
     outb(COM1_PORT + 3, 0x03);    /* 8 bits, no parity, one stop */
     outb(COM1_PORT + 2, 0xC7);    /* enable FIFO, clear, 14-byte threshold */
-    outb(COM1_PORT + 4, 0x0B);    /* IRQs enabled, RTS/DSR set */
+    outb(COM1_PORT + 4, 0x0B);    /* IRQs enabled, RTS/DSR set (OUT2 enables IRQ line) */
+    outb(COM1_PORT + 1, 0x01);    /* enable received data available interrupt */
 }
 
 void serial_write_char(char c)

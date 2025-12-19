@@ -1,8 +1,13 @@
 #include "kernel/idt.h"
 #include "kernel/panic.h"
 #include "kernel/console.h"
+#include "kernel/heap.h"
+#include "kernel/log.h"
 #include "kernel/serial.h"
 #include "kernel/mmu.h"
+#include "kernel/pic.h"
+#include "kernel/timer.h"
+#include "kernel/io.h"
 
 #include <stdint.h>
 
@@ -23,35 +28,33 @@ struct idt_ptr {
 
 struct interrupt_frame {
     uint64_t rip;
-    uint16_t cs;
-    uint16_t _pad0;
-    uint32_t _pad1;
+    uint64_t cs;
     uint64_t rflags;
     uint64_t rsp;
-    uint16_t ss;
-    uint16_t _pad2;
-    uint32_t _pad3;
+    uint64_t ss;
 } __attribute__((packed));
 
-static struct idt_entry idt[256] __attribute__((aligned(16)));
+static struct idt_entry idt_boot[256] __attribute__((aligned(16)));
+static struct idt_entry *idt_table = idt_boot;
+static const uint16_t idt_limit = (uint16_t)(sizeof(struct idt_entry) * 256 - 1);
 
 static void set_gate(uint8_t vec, uint64_t handler)
 {
     const uint64_t addr = handler;
-    idt[vec].offset_low = addr & 0xFFFF;
-    idt[vec].selector = 0x08;
-    idt[vec].ist = 0;
-    idt[vec].type_attr = 0x8E;
-    idt[vec].offset_mid = (addr >> 16) & 0xFFFF;
-    idt[vec].offset_high = (addr >> 32) & 0xFFFFFFFF;
-    idt[vec].zero = 0;
+    idt_table[vec].offset_low = addr & 0xFFFF;
+    idt_table[vec].selector = 0x08;
+    idt_table[vec].ist = 0;
+    idt_table[vec].type_attr = 0x8E;
+    idt_table[vec].offset_mid = (addr >> 16) & 0xFFFF;
+    idt_table[vec].offset_high = (addr >> 32) & 0xFFFFFFFF;
+    idt_table[vec].zero = 0;
 }
 
 static void idt_load(void)
 {
     const struct idt_ptr ptr = {
-        .limit = (uint16_t)(sizeof(idt) - 1),
-        .base = (uint64_t)&idt[0],
+        .limit = idt_limit,
+        .base = (uint64_t)&idt_table[0],
     };
     __asm__ volatile("lidt %0" : : "m"(ptr));
 }
@@ -165,28 +168,20 @@ static void dump_regs(struct interrupt_frame *frame, uint64_t err, uint64_t cr2,
     console_write_hex(vec);
     console_write(" RIP=");
     console_write_hex(frame->rip);
-    console_write(" RSP=");
-    console_write_hex(frame->rsp);
     console_write("\nCS=");
     console_write_hex(frame->cs);
     console_write(" RFLAGS=");
     console_write_hex(frame->rflags);
-    console_write("\nSS=");
-    console_write_hex(frame->ss);
     console_write("\n");
 
     serial_write("Vector=");
     serial_write_hex(vec);
     serial_write(" RIP=");
     serial_write_hex(frame->rip);
-    serial_write(" RSP=");
-    serial_write_hex(frame->rsp);
     serial_write(" CS=");
     serial_write_hex(frame->cs);
     serial_write(" RFLAGS=");
     serial_write_hex(frame->rflags);
-    serial_write(" SS=");
-    serial_write_hex(frame->ss);
     serial_write("\r\n");
 
     if (has_err) {
@@ -282,7 +277,37 @@ EXC_NOERR(isr_virtualization, 20)
 
 EXC_NOERR(isr_default, 255)
 
-void idt_init(void)
+static volatile uint64_t timer_ticks = 0;
+
+__attribute__((interrupt)) static void isr_irq0(struct interrupt_frame *frame)
+{
+    (void)frame;
+    timer_on_tick();
+    pic_send_eoi(0);
+}
+
+__attribute__((interrupt)) static void isr_irq1(struct interrupt_frame *frame)
+{
+    (void)frame;
+    uint8_t scancode = inb(0x60);
+    log_debug_hex("Keyboard IRQ scancode", scancode);
+    pic_send_eoi(1);
+}
+
+__attribute__((interrupt)) static void isr_irq4(struct interrupt_frame *frame)
+{
+    (void)frame;
+    /* Read UART IIR to acknowledge; value ignored */
+    (void)inb(0x3F8 + 2);
+    pic_send_eoi(4);
+}
+
+uint64_t idt_get_timer_ticks(void)
+{
+    return timer_get_ticks();
+}
+
+static void idt_build(void)
 {
     for (uint16_t i = 0; i < 256; ++i) {
         set_gate((uint8_t)i, (uint64_t)isr_default);
@@ -307,6 +332,29 @@ void idt_init(void)
     set_gate(18, (uint64_t)isr_machine_check);
     set_gate(19, (uint64_t)isr_simd);
     set_gate(20, (uint64_t)isr_virtualization);
+    set_gate(32, (uint64_t)isr_irq0);
+    set_gate(33, (uint64_t)isr_irq1);
+    set_gate(36, (uint64_t)isr_irq4);
+}
+
+void idt_init(void)
+{
+    idt_table = idt_boot;
+    idt_build();
+    idt_load();
+}
+
+void idt_relocate_heap(void)
+{
+    struct idt_entry *new_table = (struct idt_entry *)kalloc_zero(sizeof(struct idt_entry) * 256, 16);
+    if (!new_table) {
+        log_error("Failed to allocate heap-backed IDT");
+        return;
+    }
+
+    idt_table = new_table;
+    idt_build();
 
     idt_load();
+    log_info("IDT relocated to heap");
 }

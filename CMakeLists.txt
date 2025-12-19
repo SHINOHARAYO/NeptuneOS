@@ -18,10 +18,14 @@ set(KERNEL_SOURCES
     kernel/arch/x86_64/mmu.c
     kernel/arch/x86_64/paging.c
     kernel/arch/x86_64/idt.c
+    kernel/arch/x86_64/pic.c
+    kernel/arch/x86_64/pit.c
     kernel/console.c
     kernel/panic.c
     kernel/serial.c
     kernel/log.c
+    kernel/timer.c
+    kernel/heap.c
     kernel/mem.c
     kernel/printf.c
     kernel/kernel.c
@@ -71,4 +75,16 @@ add_custom_target(run
     COMMAND qemu-system-x86_64 -cdrom ${ISO_IMAGE} -serial stdio -no-reboot -no-shutdown
     DEPENDS iso
     USES_TERMINAL
+)
+
+add_custom_target(run-4g
+    COMMAND qemu-system-x86_64 -cdrom ${ISO_IMAGE} -serial stdio -m 4G -no-reboot -no-shutdown
+    DEPENDS iso
+    USES_TERMINAL
+)
+
+# Remove build artifacts produced by this CMake project.
+add_custom_target(clean-all
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/isodir ${CMAKE_BINARY_DIR}/kernel.iso ${CMAKE_BINARY_DIR}/kernel.map ${CMAKE_BINARY_DIR}/kernel.elf
+    COMMENT "Cleaning generated ISO, map, and ELF outputs"
 )

@@ -1,6 +1,8 @@
 .section .data
 .align 8
 .globl gdt64_descriptor
+.globl gdt64
+.globl gdt64_end
 
 gdt64:
     .quad 0x0000000000000000          # null

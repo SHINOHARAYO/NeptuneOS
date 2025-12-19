@@ -11,7 +11,7 @@
 #define VGA_ROWS 25
 
 static volatile uint16_t *const vga_buffer = (uint16_t *)VGA_BUFFER_ADDR;
-static uint8_t current_color = 0x1F; /* white on blue */
+static uint8_t current_color = 0x0F; /* bright white on black */
 static uint8_t cursor_row = 0;
 static uint8_t cursor_col = 0;
 

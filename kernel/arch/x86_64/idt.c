@@ -123,6 +123,7 @@ static void log_page_fault_details(uint64_t cr2, uint64_t err)
     const uint16_t pd_index = (cr2 >> 21) & 0x1FF;
     const uint16_t pt_index = (cr2 >> 12) & 0x1FF;
 
+    extern uint64_t pml4_table[];
     uint64_t *pml4 = (uint64_t *)phys_to_hhdm((uint64_t)pml4_table);
     uint64_t pml4e = pml4[pml4_index];
     write_both("PML4E=", pml4e);

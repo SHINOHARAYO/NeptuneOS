@@ -39,6 +39,29 @@ static struct idt_entry idt_boot[256] __attribute__((aligned(16)));
 static struct idt_entry *idt_table = idt_boot;
 static const uint16_t idt_limit = (uint16_t)(sizeof(struct idt_entry) * 256 - 1);
 
+static volatile uint64_t expected_pf_addr = 0;
+static volatile uint64_t expected_pf_resume = 0;
+static volatile uint8_t expected_pf_active = 0;
+static volatile uint8_t expected_pf_hit = 0;
+
+void idt_expect_page_fault(uint64_t addr, uint64_t resume_rip)
+{
+    expected_pf_addr = addr;
+    expected_pf_resume = resume_rip;
+    expected_pf_hit = 0;
+    expected_pf_active = 1;
+}
+
+int idt_complete_expected_page_fault(void)
+{
+    int hit = expected_pf_hit;
+    expected_pf_hit = 0;
+    expected_pf_active = 0;
+    expected_pf_addr = 0;
+    expected_pf_resume = 0;
+    return hit;
+}
+
 static void set_gate(uint8_t vec, uint64_t handler, uint8_t ist)
 {
     const uint64_t addr = handler;
@@ -236,10 +259,19 @@ static void exception_handler(const char *label, uint8_t vec, uint64_t err, uint
 {
     uint64_t code = has_err ? err : 0;
     uint64_t rip = frame ? frame->rip : 0;
+    uint64_t cr2 = (vec == 14) ? read_cr2() : 0;
+
+    if (vec == 14 && expected_pf_active && cr2 == expected_pf_addr) {
+        expected_pf_hit = 1;
+        expected_pf_active = 0;
+        if (frame) {
+            frame->rip = expected_pf_resume;
+        }
+        return;
+    }
 
     log_exception(label, vec, err, has_err, rip);
 
-    uint64_t cr2 = (vec == 14) ? read_cr2() : 0;
     if (vec == 14) {
         log_page_fault_details(cr2, err);
     }

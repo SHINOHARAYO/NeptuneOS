@@ -14,9 +14,9 @@
 #define VGA_HIGHER_HALF (HIGHER_HALF_BASE + VGA_PHYS)
 #define MULTIBOOT2_MAGIC 0x36D76289U
 
-#define ENABLE_NX_TEST 0
-#define ENABLE_TEXT_WP_TEST 0
-#define ENABLE_SECTION_PROTECT 0 /* fucking disable for fuckingeasier debugging(shit!) */
+#define ENABLE_NX_TEST 1
+#define ENABLE_TEXT_WP_TEST 1
+#define ENABLE_SECTION_PROTECT 1
 
 extern uint64_t pml4_table[];
 
@@ -28,6 +28,14 @@ static inline void drop_identity_map(void)
     uint64_t *pml4_high = (uint64_t *)phys_to_higher_half(phys_pml4);
     pml4_high[0] = 0;
     __asm__ volatile("mov %0, %%cr3" : : "r"(phys_pml4) : "memory");
+}
+
+static inline void enable_write_protect(void)
+{
+    uint64_t cr0;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+    cr0 |= (1ULL << 16);
+    __asm__ volatile("mov %0, %%cr0" : : "r"(cr0) : "memory");
 }
 
 static void trigger_page_fault_test(void)
@@ -59,6 +67,20 @@ static void heartbeat_cb(uint64_t ticks, void *user)
     }
     state->next_tick = ticks + state->interval;
     log_debug_hex("Heartbeat tick", ticks);
+}
+
+static void heap_verify_checkpoint(const char *label)
+{
+    int hv = kheap_verify();
+    if (hv != 0) {
+        log_error("Heap verification failed");
+        if (label) {
+            log_info(label);
+        }
+        log_info_hex("Heap verify code", (uint64_t)hv);
+    } else if (label) {
+        log_debug(label);
+    }
 }
 
 void kernel_main(uint32_t magic, uint32_t multiboot_info)
@@ -105,6 +127,8 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
     log_info("Applying kernel section protections...");
     mmu_protect_kernel_sections();
     log_info("Kernel sections protected.");
+    enable_write_protect();
+    log_info("Write-protect enabled.");
     #else
     log_info("Kernel section protections skipped (disabled).");
     #endif
@@ -116,13 +140,16 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
     log_info("Kernel heap initialized.");
     kalloc_enable_frees();
     log_info("Kernel heap free tracking enabled.");
+    heap_verify_checkpoint("Heap verified after heap init");
 
     log_info("Relocating GDT...");
     gdt_relocate_heap();
+    heap_verify_checkpoint("Heap verified after GDT relocation");
 
     log_info("Rebuilding IDT on heap...");
     idt_relocate_heap();
     log_info("IDT relocated to heap.");
+    heap_verify_checkpoint("Heap verified after IDT relocation");
     log_info("Remapping PIC and enabling timer...");
     pic_remap(0x20, 0x28);
     pic_enable_irq(0); /* PIT */
@@ -135,6 +162,7 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
         log_warn("Failed to register heartbeat callback");
     }
     log_info("PIC/PIT initialized.");
+    heap_verify_checkpoint("Heap verified after PIC/PIT init");
     __asm__ volatile("sti");
     /* wait a few ticks to confirm timer interrupt fires */
     uint64_t start_ticks = idt_get_timer_ticks();
@@ -144,13 +172,7 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
         ++wait_loops;
     }
     log_info_hex("Timer ticks observed", idt_get_timer_ticks());
-    int hv = kheap_verify();
-    if (hv != 0) {
-        log_error("Heap verification failed");
-        log_info_hex("Heap verify code", (uint64_t)hv);
-    } else {
-        log_info("Heap verification passed");
-    }
+    heap_verify_checkpoint("Heap verified after initial timer ticks");
     /* heap smoke test with frees */
     void *h1 = kalloc(40, 8);
     void *h2 = kalloc_zero(200, 16);
@@ -169,7 +191,15 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
     uint64_t nx_page = pmm_alloc_page();
     uint8_t *nx_virt = (uint8_t *)mmu_kmap(nx_page, MMU_FLAG_WRITE | MMU_FLAG_NOEXEC);
     nx_virt[0] = 0xC3; /* ret */
-    __asm__ volatile("call *%0" : : "r"(nx_virt) : "memory"); /* should fault on instruction fetch */
+    void *nx_resume_rip = &&nx_resume;
+    idt_expect_page_fault((uint64_t)nx_virt, (uint64_t)nx_resume_rip);
+    __asm__ volatile("call *%0" : : "r"(nx_virt) : "memory");
+nx_resume:
+    if (idt_complete_expected_page_fault()) {
+        log_info("NX self-test passed");
+    } else {
+        log_warn("NX self-test did not fault");
+    }
     #endif
     log_debug_hex("PMM total bytes", pmm_total_bytes());
     log_debug_hex("PMM used bytes", pmm_used_bytes());
@@ -196,7 +226,15 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
     #if ENABLE_TEXT_WP_TEST
     log_info("Running .text write-protection test (expect page fault)...");
     volatile uint8_t *code_ptr = (volatile uint8_t *)&kernel_main;
+    void *wp_resume_rip = &&wp_resume;
+    idt_expect_page_fault((uint64_t)code_ptr, (uint64_t)wp_resume_rip);
     *code_ptr = 0x90; /* attempt to write NOP into code */
+wp_resume:
+    if (idt_complete_expected_page_fault()) {
+        log_info("Text write-protect test passed");
+    } else {
+        log_warn("Text write-protect test did not fault");
+    }
     #endif
 
     log_info("Dropping identity map; switching to higher-half only.");

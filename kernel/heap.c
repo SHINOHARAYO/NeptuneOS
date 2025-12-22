@@ -30,6 +30,7 @@ static bool frees_enabled = false;
 struct free_node { struct free_node *next; uint64_t size; uint64_t align; };
 static struct free_node *free_lists[KHEAP_MAX_SLAB_CLASSES] = {0};
 static struct free_node *free_large = NULL;
+static const uint64_t large_split_min = HEAP_PAYLOAD_OFFSET + 32;
 static uint64_t total_allocs = 0;
 static uint64_t total_frees = 0;
 static uint64_t slab_allocs[KHEAP_MAX_SLAB_CLASSES] = {0};
@@ -107,10 +108,24 @@ static void insert_large_node(struct free_node *node)
     }
 }
 
+static void insert_large_fragment(uint64_t addr, uint64_t size)
+{
+    if (size < large_split_min) {
+        return;
+    }
+    struct free_node *node = (struct free_node *)addr;
+    if (!is_canonical((uint64_t)node)) {
+        log_error("insert_large_fragment: bad node");
+        return;
+    }
+    node->size = size;
+    insert_large_node(node);
+}
+
 void kheap_init(void)
 {
-    heap_cur = HEAP_BASE;
-    heap_end = HEAP_BASE;
+    heap_cur = HEAP_BASE + 4096;
+    heap_end = HEAP_BASE + 4096;
     map_next_page();
     log_info("Kernel heap initialized.");
     heap_ready = true;
@@ -200,34 +215,28 @@ void *kalloc(size_t size, size_t align)
     struct free_node **prev = &free_large;
     struct free_node *node = free_large;
     while (node) {
-        if (node->size >= total_need && node->align >= req_align) {
-            *prev = node->next;
-            uint8_t *block = (uint8_t *)node;
-            struct alloc_hdr *hdr = (struct alloc_hdr *)block;
-            hdr->class_idx = LARGE_CLASS;
-            hdr->size = total_need;
-            hdr->align = req_align;
-
-            /* split leftover into a new free node if big enough */
-            uint64_t leftover_start = align_up_uint((uint64_t)block + total_need, 16);
-            if (leftover_start < (uint64_t)block + node->size) {
-                uint64_t leftover_size = (uint64_t)block + node->size - leftover_start;
-                if (leftover_size >= HEAP_PAYLOAD_OFFSET + 32) {
-                    struct free_node *left = (struct free_node *)leftover_start;
-                    if (!is_canonical((uint64_t)left)) {
-                        log_error("Non-canonical leftover split node");
-                    } else {
-                    left->size = leftover_size;
-                    left->align = 16;
-                    left->next = free_large;
-                    free_large = left;
-                    }
+        if (node->size >= total_need) {
+            uint64_t node_addr = (uint64_t)node;
+            uint64_t node_end = node_addr + node->size;
+            uint64_t aligned_start = align_up_uint(node_addr + HEAP_PAYLOAD_OFFSET, req_align) - HEAP_PAYLOAD_OFFSET;
+            uint64_t block_end = aligned_start + total_need;
+            if (aligned_start >= node_addr && block_end <= node_end) {
+                *prev = node->next;
+                if (aligned_start > node_addr) {
+                    insert_large_fragment(node_addr, aligned_start - node_addr);
                 }
-            }
+                if (block_end < node_end) {
+                    insert_large_fragment(block_end, node_end - block_end);
+                }
 
-            ++total_allocs;
-            ++large_reuses;
-            return (void *)(block + HEAP_PAYLOAD_OFFSET);
+                struct alloc_hdr *hdr = (struct alloc_hdr *)aligned_start;
+                hdr->class_idx = LARGE_CLASS;
+                hdr->size = total_need;
+                hdr->align = req_align;
+                ++total_allocs;
+                ++large_reuses;
+                return (void *)(aligned_start + HEAP_PAYLOAD_OFFSET);
+            }
         }
         prev = &node->next;
         node = node->next;

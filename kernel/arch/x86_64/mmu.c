@@ -88,14 +88,14 @@ static uint64_t *ensure_table(uint64_t *parent, uint16_t index, uint64_t flags)
     if (entry & PTE_PS) {
         /* split 2MiB page into 4KiB PTEs using existing flags */
         uint64_t base = entry & ~((1ULL << 21) - 1);
-        uint64_t flags_keep = entry & ~(PTE_PS);
+        uint64_t flags_keep = entry & (PTE_PRESENT | PTE_RW | PTE_USER | (1ULL << 8) | (1ULL << 63));
         phys = pmm_alloc_page();
         uint64_t *pt = (uint64_t *)table_ptr(phys);
         for (uint64_t i = 0; i < 512; ++i) {
             uint64_t pte = (base + (i * 4096)) | flags_keep;
             pt[i] = pte;
         }
-        parent[index] = phys | (flags_keep & ~0xFFFULL) | PTE_PRESENT | PTE_RW | (flags_keep & (PTE_USER | (1ULL << 8) | (1ULL << 63)));
+        parent[index] = phys | PTE_PRESENT | (flags_keep & (PTE_RW | PTE_USER | (1ULL << 8) | (1ULL << 63)));
         return pt;
     }
     if (!(entry & PTE_PRESENT)) {

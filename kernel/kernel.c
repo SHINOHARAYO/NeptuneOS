@@ -9,6 +9,7 @@
 #include "kernel/pic.h"
 #include "kernel/pit.h"
 #include "kernel/timer.h"
+#include "kernel/sched.h"
 
 #define VGA_PHYS 0xB8000ULL
 #define VGA_HIGHER_HALF (HIGHER_HALF_BASE + VGA_PHYS)
@@ -80,6 +81,15 @@ static void heap_verify_checkpoint(const char *label)
         log_info_hex("Heap verify code", (uint64_t)hv);
     } else if (label) {
         log_debug(label);
+    }
+}
+
+static void idle_thread(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        __asm__ volatile("hlt");
+        sched_yield();
     }
 }
 
@@ -243,8 +253,10 @@ wp_resume:
 
     trigger_page_fault_test();
 
-    
-    for (;;) {
-        __asm__ volatile("hlt");
+    log_info("Starting scheduler...");
+    sched_init();
+    if (sched_create(idle_thread, NULL) != 0) {
+        log_error("Failed to create idle thread");
     }
+    sched_start();
 }

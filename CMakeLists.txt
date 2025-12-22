@@ -14,12 +14,14 @@ find_program(GRUB_MKRESCUE
 set(KERNEL_SOURCES
     kernel/boot/boot.s
     kernel/arch/x86_64/gdt.s
+    kernel/arch/x86_64/switch.s
     kernel/arch/x86_64/gdt.c
     kernel/arch/x86_64/mmu.c
     kernel/arch/x86_64/paging.c
     kernel/arch/x86_64/idt.c
     kernel/arch/x86_64/pic.c
     kernel/arch/x86_64/pit.c
+    kernel/sched.c
     kernel/irq.c
     kernel/console.c
     kernel/panic.c

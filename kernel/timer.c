@@ -1,4 +1,5 @@
 #include "kernel/timer.h"
+#include "kernel/sched.h"
 
 #define MAX_TIMER_CALLBACKS 8
 
@@ -14,6 +15,7 @@ static uint64_t timer_ticks = 0;
 void timer_on_tick(void)
 {
     ++timer_ticks;
+    sched_on_tick();
     for (int i = 0; i < MAX_TIMER_CALLBACKS; ++i) {
         if (callbacks[i].cb) {
             callbacks[i].cb(timer_ticks, callbacks[i].user);

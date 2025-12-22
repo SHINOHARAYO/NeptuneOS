@@ -17,5 +17,7 @@ void sched_init(void);
 int sched_create(void (*entry)(void *), void *arg);
 void sched_yield(void);
 void sched_start(void);
+void sched_on_tick(void);
+void sched_maybe_preempt(void);
 
 void context_switch(struct context *old_ctx, struct context *new_ctx);

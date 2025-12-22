@@ -89,7 +89,21 @@ static void idle_thread(void *arg)
     (void)arg;
     for (;;) {
         __asm__ volatile("hlt");
-        sched_yield();
+        sched_maybe_preempt();
+    }
+}
+
+static void worker_thread(void *arg)
+{
+    uint64_t id = (uint64_t)arg;
+    uint64_t last = 0;
+    for (;;) {
+        uint64_t now = timer_get_ticks();
+        if (now - last >= 100) {
+            log_debug_hex("Worker tick", id);
+            last = now;
+        }
+        sched_maybe_preempt();
     }
 }
 
@@ -255,6 +269,12 @@ wp_resume:
 
     log_info("Starting scheduler...");
     sched_init();
+    if (sched_create(worker_thread, (void *)1) != 0) {
+        log_error("Failed to create worker thread 1");
+    }
+    if (sched_create(worker_thread, (void *)2) != 0) {
+        log_error("Failed to create worker thread 2");
+    }
     if (sched_create(idle_thread, NULL) != 0) {
         log_error("Failed to create idle thread");
     }

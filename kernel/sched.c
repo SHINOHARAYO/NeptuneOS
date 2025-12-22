@@ -27,6 +27,11 @@ static struct thread threads[MAX_THREADS];
 static size_t thread_count = 0;
 static size_t current_index = 0;
 static struct thread *current_thread = NULL;
+static volatile uint64_t sched_ticks = 0;
+static volatile uint8_t need_resched = 0;
+static uint64_t last_switch_tick = 0;
+static uint64_t time_slice_ticks = 5;
+static int sched_ready = 0;
 
 static void sched_exit(void);
 
@@ -70,6 +75,10 @@ void sched_init(void)
     current_index = 0;
     current_thread = &threads[0];
     current_thread->state = THREAD_RUNNING;
+    sched_ticks = 0;
+    need_resched = 0;
+    last_switch_tick = 0;
+    sched_ready = 1;
 }
 
 int sched_create(void (*entry)(void *), void *arg)
@@ -123,10 +132,33 @@ void sched_yield(void)
     next->state = THREAD_RUNNING;
     current_index = (size_t)next_idx;
     current_thread = next;
+    last_switch_tick = sched_ticks;
+    need_resched = 0;
     context_switch(&prev->ctx, &next->ctx);
 }
 
 void sched_start(void)
 {
     sched_exit();
+}
+
+void sched_on_tick(void)
+{
+    if (!sched_ready) {
+        return;
+    }
+    ++sched_ticks;
+    if ((sched_ticks - last_switch_tick) >= time_slice_ticks) {
+        need_resched = 1;
+    }
+}
+
+void sched_maybe_preempt(void)
+{
+    if (!sched_ready) {
+        return;
+    }
+    if (need_resched) {
+        sched_yield();
+    }
 }

@@ -29,6 +29,10 @@ This produces `build/kernel.elf` and the GRUB ISO `build/kernel.iso`.
 cmake --build build --target iso
 qemu-system-x86_64 -cdrom build/kernel.iso -serial stdio -no-reboot -no-shutdown
 ```
+Headless run (serial log saved to `build/qemu-serial.log`):
+```sh
+cmake --build build --target run-headless
+```
 Console logs appear on VGA; duplicate logs are emitted to the serial port (shown in `-serial stdio`).
 
 ## Layout
@@ -46,6 +50,3 @@ Console logs appear on VGA; duplicate logs are emitted to the serial port (shown
 - The PMM logs each managed region (start/end, usable pages) at boot to both console and serial.
 - After initialization, the identity map is dropped; only higher-half mappings remain. Avoid using low virtual addresses after that point.
 - Panic paths halt the CPU and emit messages to both VGA and serial for debugging.
-
-## TODO / Next Steps
-- Build/scripts: keep `clean-all` updated; optionally add a target for QEMU runs focused on IRQ testing. 

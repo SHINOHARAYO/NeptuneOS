@@ -60,6 +60,7 @@ target_link_options(kernel PRIVATE
 
 set(ISODIR ${CMAKE_BINARY_DIR}/isodir)
 set(ISO_IMAGE ${CMAKE_BINARY_DIR}/kernel.iso)
+set(QEMU_SERIAL_LOG ${CMAKE_BINARY_DIR}/qemu-serial.log)
 
 add_custom_command(OUTPUT ${ISO_IMAGE}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${ISODIR}/boot/grub
@@ -84,8 +85,22 @@ add_custom_target(run-4g
     USES_TERMINAL
 )
 
+add_custom_target(run-headless
+    COMMAND ${CMAKE_COMMAND} -E rm -f ${QEMU_SERIAL_LOG}
+    COMMAND ${CMAKE_COMMAND} -E echo "Serial log: ${QEMU_SERIAL_LOG}"
+    COMMAND qemu-system-x86_64 -cdrom ${ISO_IMAGE} -display none -serial file:${QEMU_SERIAL_LOG} -no-reboot -no-shutdown
+    DEPENDS iso
+    USES_TERMINAL
+)
+
+add_custom_target(boot-smoke
+    COMMAND ${CMAKE_COMMAND} -E env BUILD_DIR=${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/scripts/boot-smoke.sh
+    DEPENDS iso
+    USES_TERMINAL
+)
+
 # Remove build artifacts produced by this CMake project.
 add_custom_target(clean-all
-    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/isodir ${CMAKE_BINARY_DIR}/kernel.iso ${CMAKE_BINARY_DIR}/kernel.map ${CMAKE_BINARY_DIR}/kernel.elf
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/isodir ${CMAKE_BINARY_DIR}/kernel.iso ${CMAKE_BINARY_DIR}/kernel.map ${CMAKE_BINARY_DIR}/kernel.elf ${QEMU_SERIAL_LOG}
     COMMENT "Cleaning generated ISO, map, and ELF outputs"
 )

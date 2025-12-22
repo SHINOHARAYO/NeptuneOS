@@ -127,7 +127,7 @@ void kheap_init(void)
     heap_cur = HEAP_BASE + 4096;
     heap_end = HEAP_BASE + 4096;
     map_next_page();
-    log_info("Kernel heap initialized.");
+    //log_info("Kernel heap initialized.");
     heap_ready = true;
 }
 

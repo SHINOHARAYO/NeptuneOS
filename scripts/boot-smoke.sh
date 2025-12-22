@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-$ROOT_DIR/build}"
 LOG_FILE="${LOG_FILE:-$BUILD_DIR/qemu-serial.log}"
 TIMEOUT_SECS="${TIMEOUT_SECS:-20}"
+KILL_GRACE_SECS="${KILL_GRACE_SECS:-5}"
 
 cmake -S "$ROOT_DIR" -B "$BUILD_DIR"
 cmake --build "$BUILD_DIR" --target iso
@@ -13,25 +14,52 @@ mkdir -p "$(dirname "$LOG_FILE")"
 rm -f "$LOG_FILE"
 : > "$LOG_FILE"
 
-if ! command -v timeout >/dev/null 2>&1; then
-    echo "boot-smoke: missing 'timeout' (coreutils). Install it or run QEMU manually." >&2
-    exit 1
-fi
-
 set +e
-timeout "${TIMEOUT_SECS}s" qemu-system-x86_64 \
+qemu-system-x86_64 \
     -cdrom "$BUILD_DIR/kernel.iso" \
     -display none \
     -serial "file:${LOG_FILE}" \
     -no-reboot \
-    -no-shutdown
-status=$?
+    -no-shutdown &
+qemu_pid=$!
 set -e
 
-if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
-    echo "boot-smoke: QEMU failed (status $status)" >&2
-    exit "$status"
+remaining="$TIMEOUT_SECS"
+while [ "$remaining" -gt 0 ]; do
+    if [ -s "$LOG_FILE" ] && grep -q "Text write-protect test passed" "$LOG_FILE"; then
+        break
+    fi
+    sleep 1
+    remaining=$((remaining - 1))
+done
+killed=0
+if kill -0 "$qemu_pid" 2>/dev/null; then
+    killed=1
+    kill -TERM "$qemu_pid" 2>/dev/null || true
+    grace="$KILL_GRACE_SECS"
+    while [ "$grace" -gt 0 ]; do
+        if ! kill -0 "$qemu_pid" 2>/dev/null; then
+            break
+        fi
+        sleep 1
+        grace=$((grace - 1))
+    done
+    if kill -0 "$qemu_pid" 2>/dev/null; then
+        kill -KILL "$qemu_pid" 2>/dev/null || true
+    fi
 fi
+
+set +e
+wait "$qemu_pid"
+status=$?
+set -e
+if [ "$killed" -eq 0 ] && [ "$status" -ne 0 ]; then
+    echo "boot-smoke: QEMU failed to run" >&2
+    exit 1
+fi
+
+sleep 1
+sync || true
 
 if [ ! -s "$LOG_FILE" ]; then
     echo "boot-smoke: no serial log captured at $LOG_FILE" >&2

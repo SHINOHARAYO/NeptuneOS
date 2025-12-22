@@ -22,9 +22,9 @@ set +e
 timeout "${TIMEOUT_SECS}s" qemu-system-x86_64 \
     -cdrom "$BUILD_DIR/kernel.iso" \
     -display none \
-    -serial stdio \
+    -serial "file:${LOG_FILE}" \
     -no-reboot \
-    -no-shutdown >"$LOG_FILE" 2>&1
+    -no-shutdown
 status=$?
 set -e
 

@@ -9,7 +9,9 @@ TIMEOUT_SECS="${TIMEOUT_SECS:-20}"
 cmake -S "$ROOT_DIR" -B "$BUILD_DIR"
 cmake --build "$BUILD_DIR" --target iso
 
+mkdir -p "$(dirname "$LOG_FILE")"
 rm -f "$LOG_FILE"
+: > "$LOG_FILE"
 
 if ! command -v timeout >/dev/null 2>&1; then
     echo "boot-smoke: missing 'timeout' (coreutils). Install it or run QEMU manually." >&2
@@ -20,9 +22,9 @@ set +e
 timeout "${TIMEOUT_SECS}s" qemu-system-x86_64 \
     -cdrom "$BUILD_DIR/kernel.iso" \
     -display none \
-    -serial "file:${LOG_FILE}" \
+    -serial stdio \
     -no-reboot \
-    -no-shutdown
+    -no-shutdown >"$LOG_FILE" 2>&1
 status=$?
 set -e
 

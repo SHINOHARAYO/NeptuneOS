@@ -50,3 +50,11 @@ Console logs appear on VGA; duplicate logs are emitted to the serial port (shown
 - The PMM logs each managed region (start/end, usable pages) at boot to both console and serial.
 - After initialization, the identity map is dropped; only higher-half mappings remain. Avoid using low virtual addresses after that point.
 - Panic paths halt the CPU and emit messages to both VGA and serial for debugging.
+
+## TODO / Next Steps
+- Scheduler: add a basic round-robin scheduler with per-thread stacks, context switch, and tick-based preemption.
+- User mode: define a user virtual layout, ring 3 entry path, and per-process page tables.
+- Syscalls: implement a small syscall ABI (read/write/exit/yield/spawn or exec).
+- Loader: add a minimal ELF64 loader with user stack setup.
+- Files/TTY: wire a console/TTY device and a tiny in-memory FS for stdin/stdout.
+- Shell: build a simple REPL with built-ins and command dispatch to user programs.

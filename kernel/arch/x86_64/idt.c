@@ -8,6 +8,7 @@
 #include "kernel/pic.h"
 #include "kernel/timer.h"
 #include "kernel/io.h"
+#include "kernel/irq.h"
 
 #include <stdint.h>
 
@@ -289,16 +290,14 @@ __attribute__((interrupt)) static void isr_irq0(struct interrupt_frame *frame)
 __attribute__((interrupt)) static void isr_irq1(struct interrupt_frame *frame)
 {
     (void)frame;
-    uint8_t scancode = inb(0x60);
-    log_debug_hex("Keyboard IRQ scancode", scancode);
+    irq_dispatch(IRQ_KEYBOARD);
     pic_send_eoi(1);
 }
 
 __attribute__((interrupt)) static void isr_irq4(struct interrupt_frame *frame)
 {
     (void)frame;
-    /* Read UART IIR to acknowledge; value ignored */
-    (void)inb(0x3F8 + 2);
+    irq_dispatch(IRQ_SERIAL_COM1);
     pic_send_eoi(4);
 }
 

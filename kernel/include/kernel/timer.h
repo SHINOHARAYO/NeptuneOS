@@ -12,8 +12,3 @@ int timer_register_callback(timer_callback_t cb, void *user);
 
 /* Read the global tick count. */
 uint64_t timer_get_ticks(void);
-
-/* IRQ numbers after PIC remap used by the timer module. */
-#define IRQ_TIMER 32
-#define IRQ_KEYBOARD 33
-#define IRQ_SERIAL_COM1 36

@@ -48,8 +48,6 @@ Console logs appear on VGA; duplicate logs are emitted to the serial port (shown
 - Panic paths halt the CPU and emit messages to both VGA and serial for debugging.
 
 ## TODO / Next Steps
-- IRQ inputs: wire keyboard input buffering and serial RX buffering; add a small IRQ dispatcher with per-IRQ handlers.
-- Timer: register a periodic callback (heartbeat/logger) to exercise `timer_register_callback` and lay groundwork for a scheduler tick.
 - Memory: finish coalescing/large-block reuse improvements and call `kheap_verify` after major init steps/drivers.
 - Protection: enable NX/text write-protect self-tests, mark more regions with correct permissions (guard pages, device mappings RW/NX).
 - Build/scripts: keep `clean-all` updated; optionally add a target for QEMU runs focused on IRQ testing. 

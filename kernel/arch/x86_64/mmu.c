@@ -21,9 +21,6 @@ static bool hhdm_ready = false;
 
 static inline void *table_ptr(uint64_t phys)
 {
-    if (hhdm_ready) {
-        return (void *)phys_to_hhdm(phys);
-    }
     return (void *)phys_to_higher_half(phys);
 }
 
@@ -258,6 +255,15 @@ void mmu_protect_kernel_sections(void)
     const uint64_t bss_phys_start = virt_to_phys(&_bss_start);
     const uint64_t bss_phys_end = virt_to_phys(&_bss_end);
 
+    log_debug_hex("Protect .text start", text_phys_start);
+    log_debug_hex("Protect .text end", text_phys_end);
+    log_debug_hex("Protect .rodata start", rodata_phys_start);
+    log_debug_hex("Protect .rodata end", rodata_phys_end);
+    log_debug_hex("Protect .data start", data_phys_start);
+    log_debug_hex("Protect .data end", data_phys_end);
+    log_debug_hex("Protect .bss start", bss_phys_start);
+    log_debug_hex("Protect .bss end", bss_phys_end);
+
     uint64_t text_flags = MMU_FLAG_GLOBAL; /* RX */
     uint64_t ro_flags = MMU_FLAG_GLOBAL | MMU_FLAG_NOEXEC; /* RO, NX */
     uint64_t data_flags = MMU_FLAG_GLOBAL | MMU_FLAG_WRITE | MMU_FLAG_NOEXEC;
@@ -265,19 +271,24 @@ void mmu_protect_kernel_sections(void)
     for (uint64_t phys = align_down_4k(text_phys_start); phys < align_up_4k(text_phys_end); phys += 4096) {
         uint64_t virt = phys_to_higher_half(phys);
         mmu_map_page(virt, phys, text_flags);
+        log_debug_hex("Mapped .text page", virt);
     }
     for (uint64_t phys = align_down_4k(rodata_phys_start); phys < align_up_4k(rodata_phys_end); phys += 4096) {
         uint64_t virt = phys_to_higher_half(phys);
         mmu_map_page(virt, phys, ro_flags);
+        log_debug_hex("Mapped .rodata page", virt);
     }
     for (uint64_t phys = align_down_4k(data_phys_start); phys < align_up_4k(data_phys_end); phys += 4096) {
         uint64_t virt = phys_to_higher_half(phys);
         mmu_map_page(virt, phys, data_flags);
+        log_debug_hex("Mapped .data page", virt);
     }
     for (uint64_t phys = align_down_4k(bss_phys_start); phys < align_up_4k(bss_phys_end); phys += 4096) {
         uint64_t virt = phys_to_higher_half(phys);
         mmu_map_page(virt, phys, data_flags);
+        log_debug_hex("Mapped .bss page", virt);
     }
 
     mmu_reload_cr3();
+    log_info("Kernel section protections applied.");
 }

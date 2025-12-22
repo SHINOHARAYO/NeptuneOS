@@ -20,6 +20,7 @@ set(KERNEL_SOURCES
     kernel/arch/x86_64/idt.c
     kernel/arch/x86_64/pic.c
     kernel/arch/x86_64/pit.c
+    kernel/irq.c
     kernel/console.c
     kernel/panic.c
     kernel/serial.c

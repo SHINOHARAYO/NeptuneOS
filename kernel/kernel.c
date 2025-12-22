@@ -8,6 +8,7 @@
 #include "kernel/gdt.h"
 #include "kernel/pic.h"
 #include "kernel/pit.h"
+#include "kernel/timer.h"
 
 #define VGA_PHYS 0xB8000ULL
 #define VGA_HIGHER_HALF (HIGHER_HALF_BASE + VGA_PHYS)
@@ -15,6 +16,7 @@
 
 #define ENABLE_NX_TEST 0
 #define ENABLE_TEXT_WP_TEST 0
+#define ENABLE_SECTION_PROTECT 0 /* fucking disable for fuckingeasier debugging(shit!) */
 
 extern uint64_t pml4_table[];
 
@@ -37,6 +39,26 @@ static void trigger_page_fault_test(void)
     (void)*ptr;
     log_warn("Page fault test unexpectedly did not fault.");
 #endif
+}
+
+struct heartbeat_state {
+    uint64_t next_tick;
+    uint64_t interval;
+};
+
+static struct heartbeat_state heartbeat_state;
+
+static void heartbeat_cb(uint64_t ticks, void *user)
+{
+    struct heartbeat_state *state = (struct heartbeat_state *)user;
+    if (!state || state->interval == 0) {
+        return;
+    }
+    if (ticks < state->next_tick) {
+        return;
+    }
+    state->next_tick = ticks + state->interval;
+    log_debug_hex("Heartbeat tick", ticks);
 }
 
 void kernel_main(uint32_t magic, uint32_t multiboot_info)
@@ -66,6 +88,10 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
     log_debug_hex("Multiboot2 info size", multiboot_size);
     log_debug_hex("Multiboot2 info phys", multiboot_info_phys);
 
+    log_info("Initializing IDT (early)...");
+    idt_init();
+    log_info("IDT initialized.");
+
     log_info("Initializing physical memory manager...");
     mem_init(multiboot_info_phys);
     log_info("Physical memory manager initialized.");
@@ -75,9 +101,13 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
     log_info("Extending higher-half direct map...");
     mmu_map_hhdm_2m(0, max_phys);
     log_info("Higher-half direct map updated.");
+    #if ENABLE_SECTION_PROTECT
     log_info("Applying kernel section protections...");
     mmu_protect_kernel_sections();
     log_info("Kernel sections protected.");
+    #else
+    log_info("Kernel section protections skipped (disabled).");
+    #endif
     log_info("Protecting VGA mapping (RW/NX)...");
     mmu_map_page(VGA_HIGHER_HALF, VGA_PHYS, MMU_FLAG_WRITE | MMU_FLAG_GLOBAL | MMU_FLAG_NOEXEC);
     log_info("VGA mapping protected.");
@@ -90,16 +120,20 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
     log_info("Relocating GDT...");
     gdt_relocate_heap();
 
-    log_info("Initializing IDT...");
-    idt_init();
+    log_info("Rebuilding IDT on heap...");
     idt_relocate_heap();
-    log_info("IDT initialized and relocated to heap.");
+    log_info("IDT relocated to heap.");
     log_info("Remapping PIC and enabling timer...");
     pic_remap(0x20, 0x28);
     pic_enable_irq(0); /* PIT */
     pic_enable_irq(1); /* Keyboard */
     pic_enable_irq(4); /* COM1 */
     pit_init(100); /* 100 Hz */
+    heartbeat_state.next_tick = 100;
+    heartbeat_state.interval = 100;
+    if (timer_register_callback(heartbeat_cb, &heartbeat_state) != 0) {
+        log_warn("Failed to register heartbeat callback");
+    }
     log_info("PIC/PIT initialized.");
     __asm__ volatile("sti");
     /* wait a few ticks to confirm timer interrupt fires */

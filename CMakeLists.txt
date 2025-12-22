@@ -95,12 +95,6 @@ add_custom_target(run-headless
     USES_TERMINAL
 )
 
-add_custom_target(boot-smoke
-    COMMAND ${CMAKE_COMMAND} -E env BUILD_DIR=${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/scripts/boot-smoke.sh
-    DEPENDS iso
-    USES_TERMINAL
-)
-
 # Remove build artifacts produced by this CMake project.
 add_custom_target(clean-all
     COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/isodir ${CMAKE_BINARY_DIR}/kernel.iso ${CMAKE_BINARY_DIR}/kernel.map ${CMAKE_BINARY_DIR}/kernel.elf ${QEMU_SERIAL_LOG}

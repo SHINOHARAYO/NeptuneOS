@@ -10,11 +10,19 @@
 #include <stdint.h>
 
 #define USER_STACK_PAGE_SIZE 4096
+#define USER_ARG_MAX 8
+#define USER_ENV_MAX 8
 
 #define USER_ELF_SIZE 0x200
 #define USER_ELF_CODE_OFFSET 0x80
 #define USER_ELF_MSG_OFFSET 0x180
 #define USER_ELF_MSG_LEN 20
+
+struct user_image {
+    const char *name;
+    const uint8_t *data;
+    uint64_t size;
+};
 
 static const uint8_t user_elf[USER_ELF_SIZE] = {
     0x7F, 'E', 'L', 'F', 0x02, 0x01, 0x01, 0x00,
@@ -44,6 +52,112 @@ static const uint8_t user_elf[USER_ELF_SIZE] = {
     ' ', 'u', 's', 'e', 'r', ' ', 'E', 'L', 'F', '\n',
 };
 
+static const struct user_image user_images[] = {
+    { "hello", user_elf, sizeof(user_elf) },
+};
+
+static int streq(const char *a, const char *b)
+{
+    if (!a || !b) {
+        return 0;
+    }
+    while (*a && *b) {
+        if (*a != *b) {
+            return 0;
+        }
+        ++a;
+        ++b;
+    }
+    return *a == *b;
+}
+
+static const struct user_image *user_image_find(const char *name)
+{
+    if (!name) {
+        return NULL;
+    }
+    for (size_t i = 0; i < sizeof(user_images) / sizeof(user_images[0]); ++i) {
+        if (streq(user_images[i].name, name)) {
+            return &user_images[i];
+        }
+    }
+    return NULL;
+}
+
+static uint64_t str_len(const char *s)
+{
+    uint64_t len = 0;
+    if (!s) {
+        return 0;
+    }
+    while (s[len] != '\0') {
+        ++len;
+    }
+    return len;
+}
+
+static int stack_write(struct user_space *space, uint64_t addr, const void *data, uint64_t len)
+{
+    if (!space || !data || len == 0) {
+        return -1;
+    }
+    if (addr < space->stack_bottom || addr + len > space->stack_top) {
+        return -1;
+    }
+    uint64_t offset = addr - space->stack_bottom;
+    uint64_t remaining = len;
+    const uint8_t *src = (const uint8_t *)data;
+    while (remaining > 0) {
+        uint64_t page_index = offset / USER_STACK_PAGE_SIZE;
+        uint64_t page_off = offset % USER_STACK_PAGE_SIZE;
+        if (page_index >= space->stack_pages) {
+            return -1;
+        }
+        uint64_t phys = space->stack_phys[page_index];
+        uint8_t *dst = (uint8_t *)phys_to_hhdm(phys);
+        uint64_t chunk = USER_STACK_PAGE_SIZE - page_off;
+        if (chunk > remaining) {
+            chunk = remaining;
+        }
+        for (uint64_t i = 0; i < chunk; ++i) {
+            dst[page_off + i] = src[i];
+        }
+        src += chunk;
+        offset += chunk;
+        remaining -= chunk;
+    }
+    return 0;
+}
+
+static int push_bytes(struct user_space *space, uint64_t *sp, const void *data, uint64_t len)
+{
+    if (!space || !sp || len == 0) {
+        return -1;
+    }
+    if (*sp < space->stack_bottom + len) {
+        return -1;
+    }
+    *sp -= len;
+    return stack_write(space, *sp, data, len);
+}
+
+static int push_u64(struct user_space *space, uint64_t *sp, uint64_t value)
+{
+    return push_bytes(space, sp, &value, sizeof(value));
+}
+
+static int push_string(struct user_space *space, uint64_t *sp, const char *s, uint64_t *out_addr)
+{
+    uint64_t len = str_len(s) + 1;
+    if (push_bytes(space, sp, s, len) != 0) {
+        return -1;
+    }
+    if (out_addr) {
+        *out_addr = *sp;
+    }
+    return 0;
+}
+
 void user_exit_handler(void)
 {
     log_info("User-mode exited to kernel");
@@ -67,6 +181,11 @@ int user_space_init(struct user_space *space)
     space->pml4_phys = pml4;
     space->entry = USER_BASE;
     space->stack_top = USER_STACK_TOP;
+    space->stack_bottom = USER_STACK_TOP;
+    space->stack_pages = 0;
+    for (size_t i = 0; i < USER_STACK_MAX_PAGES; ++i) {
+        space->stack_phys[i] = 0;
+    }
     return 0;
 }
 
@@ -80,21 +199,87 @@ int user_space_map_page(struct user_space *space, uint64_t virt, uint64_t phys, 
 
 int user_space_map_stack(struct user_space *space, uint64_t pages)
 {
-    if (!space || !space->pml4_phys || pages == 0) {
+    if (!space || !space->pml4_phys || pages == 0 || pages > USER_STACK_MAX_PAGES) {
         return -1;
     }
 
+    uint64_t bottom = USER_STACK_TOP - (pages * USER_STACK_PAGE_SIZE);
     for (uint64_t i = 0; i < pages; ++i) {
         uint64_t phys = pmm_alloc_page();
         if (!phys) {
             return -1;
         }
-        uint64_t virt = USER_STACK_TOP - ((i + 1) * USER_STACK_PAGE_SIZE);
+        uint64_t virt = bottom + (i * USER_STACK_PAGE_SIZE);
         if (user_space_map_page(space, virt, phys, MMU_FLAG_WRITE | MMU_FLAG_NOEXEC) != 0) {
             return -1;
         }
+        space->stack_phys[i] = phys;
     }
     space->stack_top = USER_STACK_TOP;
+    space->stack_bottom = bottom;
+    space->stack_pages = pages;
+    return 0;
+}
+
+int user_stack_setup(struct user_space *space, const char *const *argv, const char *const *envp, uint64_t *out_sp)
+{
+    if (!space || !out_sp || space->stack_pages == 0) {
+        return -1;
+    }
+
+    uint64_t argc = 0;
+    uint64_t envc = 0;
+    while (argv && argv[argc] && argc < USER_ARG_MAX) {
+        ++argc;
+    }
+    if (argv && argv[argc]) {
+        return -1;
+    }
+    while (envp && envp[envc] && envc < USER_ENV_MAX) {
+        ++envc;
+    }
+    if (envp && envp[envc]) {
+        return -1;
+    }
+
+    uint64_t argv_addr[USER_ARG_MAX] = {0};
+    uint64_t env_addr[USER_ENV_MAX] = {0};
+    uint64_t sp = space->stack_top;
+
+    for (uint64_t i = 0; i < argc; ++i) {
+        if (push_string(space, &sp, argv[i], &argv_addr[i]) != 0) {
+            return -1;
+        }
+    }
+    for (uint64_t i = 0; i < envc; ++i) {
+        if (push_string(space, &sp, envp[i], &env_addr[i]) != 0) {
+            return -1;
+        }
+    }
+
+    sp &= ~0xFULL;
+
+    if (push_u64(space, &sp, 0) != 0) {
+        return -1;
+    }
+    for (uint64_t i = envc; i > 0; --i) {
+        if (push_u64(space, &sp, env_addr[i - 1]) != 0) {
+            return -1;
+        }
+    }
+    if (push_u64(space, &sp, 0) != 0) {
+        return -1;
+    }
+    for (uint64_t i = argc; i > 0; --i) {
+        if (push_u64(space, &sp, argv_addr[i - 1]) != 0) {
+            return -1;
+        }
+    }
+    if (push_u64(space, &sp, argc) != 0) {
+        return -1;
+    }
+
+    *out_sp = sp;
     return 0;
 }
 
@@ -147,7 +332,13 @@ void user_smoke_thread(void *arg)
         return;
     }
 
-    if (elf_load_user(user_elf, sizeof(user_elf), &space) != 0) {
+    const char *program = "hello";
+    const struct user_image *image = user_image_find(program);
+    if (!image) {
+        log_error("user_smoke: image not found");
+        return;
+    }
+    if (elf_load_user(image->data, image->size, &space) != 0) {
         log_error("user_smoke: ELF load failed");
         return;
     }
@@ -157,6 +348,14 @@ void user_smoke_thread(void *arg)
         return;
     }
 
-    log_info("Entering user-mode ELF");
-    user_enter(space.entry, space.stack_top, space.pml4_phys);
+    const char *argv[] = { program, "arg1", NULL };
+    const char *envp[] = { "TERM=neptune", "USER=guest", NULL };
+    uint64_t user_sp = 0;
+    if (user_stack_setup(&space, argv, envp, &user_sp) != 0) {
+        log_error("user_smoke: stack setup failed");
+        return;
+    }
+
+    log_info("Entering user-mode image");
+    user_enter(space.entry, user_sp, space.pml4_phys);
 }

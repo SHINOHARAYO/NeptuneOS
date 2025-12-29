@@ -58,3 +58,29 @@ void irq_dispatch(uint8_t irq)
         break;
     }
 }
+
+int irq_kb_pop(uint8_t *scancode)
+{
+    if (!scancode) {
+        return 0;
+    }
+    if (kb_tail == kb_head) {
+        return 0;
+    }
+    *scancode = kb_buf[kb_tail];
+    kb_tail = (kb_tail + 1) % KB_BUF_SIZE;
+    return 1;
+}
+
+int irq_com_pop(uint8_t *ch)
+{
+    if (!ch) {
+        return 0;
+    }
+    if (com_tail == com_head) {
+        return 0;
+    }
+    *ch = com_buf[com_tail];
+    com_tail = (com_tail + 1) % COM_BUF_SIZE;
+    return 1;
+}

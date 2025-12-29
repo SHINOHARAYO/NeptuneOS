@@ -8,6 +8,8 @@ gdt64:
     .quad 0x0000000000000000          # null
     .quad 0x00af9a000000ffff          # code
     .quad 0x00af92000000ffff          # data
+    .quad 0x00affa000000ffff          # user code
+    .quad 0x00aff2000000ffff          # user data
 
 gdt64_descriptor:
     .word gdt64_end - gdt64 - 1

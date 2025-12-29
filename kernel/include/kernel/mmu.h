@@ -50,8 +50,14 @@ void mmu_unmap_page(uint64_t virt);
 /* Reload CR3 to flush TLB entries after page table changes. */
 void mmu_reload_cr3(void);
 
+/* Create a new PML4 with kernel mappings copied into the higher half. */
+uint64_t mmu_create_user_pml4(void);
+
 /* Apply proper permissions to kernel sections (text RX, rodata RO/NX, data/bss RW/NX). */
 void mmu_protect_kernel_sections(void);
+
+/* Map a 4 KiB page in a specific PML4 (used for user address spaces). */
+int mmu_map_page_in(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint64_t flags);
 
 /* Map a kernel linear address in the higher half for a given phys; allocates tables as needed. */
 static inline void *mmu_kmap(uint64_t phys, uint64_t flags)

@@ -52,6 +52,19 @@ void serial_write(const char *msg)
     }
 }
 
+void serial_write_len(const char *msg, uint64_t len)
+{
+    if (!msg || len == 0) {
+        return;
+    }
+    for (uint64_t i = 0; i < len; ++i) {
+        if (msg[i] == '\n') {
+            serial_write_char('\r');
+        }
+        serial_write_char(msg[i]);
+    }
+}
+
 static char hex_digit(uint8_t value)
 {
     return value < 10 ? ('0' + value) : ('A' + (value - 10));

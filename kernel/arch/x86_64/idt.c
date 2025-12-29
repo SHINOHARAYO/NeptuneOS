@@ -27,14 +27,6 @@ struct idt_ptr {
     uint64_t base;
 } __attribute__((packed));
 
-struct interrupt_frame {
-    uint64_t rip;
-    uint64_t cs;
-    uint64_t rflags;
-    uint64_t rsp;
-    uint64_t ss;
-} __attribute__((packed));
-
 static struct idt_entry idt_boot[256] __attribute__((aligned(16)));
 static struct idt_entry *idt_table = idt_boot;
 static const uint16_t idt_limit = (uint16_t)(sizeof(struct idt_entry) * 256 - 1);
@@ -72,6 +64,12 @@ static void set_gate(uint8_t vec, uint64_t handler, uint8_t ist)
     idt_table[vec].offset_mid = (addr >> 16) & 0xFFFF;
     idt_table[vec].offset_high = (addr >> 32) & 0xFFFFFFFF;
     idt_table[vec].zero = 0;
+}
+
+static void set_gate_user(uint8_t vec, uint64_t handler, uint8_t ist)
+{
+    set_gate(vec, handler, ist);
+    idt_table[vec].type_attr = 0xEE; /* present, DPL=3, interrupt gate */
 }
 
 static void idt_load(void)
@@ -312,6 +310,8 @@ EXC_NOERR(isr_default, 255)
 
 static volatile uint64_t timer_ticks = 0;
 
+extern void isr_syscall(void);
+
 __attribute__((interrupt)) static void isr_irq0(struct interrupt_frame *frame)
 {
     (void)frame;
@@ -381,6 +381,7 @@ static void idt_build(void)
     set_gate(36, (uint64_t)isr_irq4, 1);
     set_gate(0x27, (uint64_t)isr_spurious_master, 0);
     set_gate(0x2F, (uint64_t)isr_spurious_slave, 0);
+    set_gate_user(0x80, (uint64_t)isr_syscall, 0);
 }
 
 void idt_init(void)

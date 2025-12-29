@@ -1,7 +1,6 @@
 #include "kernel/sched.h"
 #include "kernel/heap.h"
 #include "kernel/log.h"
-
 #include <stddef.h>
 #include <stdint.h>
 
@@ -111,6 +110,9 @@ int sched_create(void (*entry)(void *), void *arg)
 
 void sched_yield(void)
 {
+    if (!sched_ready) {
+        return;
+    }
     if (!current_thread) {
         return;
     }
@@ -120,8 +122,8 @@ void sched_yield(void)
         return;
     }
 
-    struct thread *prev = current_thread;
     struct thread *next = &threads[next_idx];
+    struct thread *prev = current_thread;
     if (next == prev) {
         return;
     }

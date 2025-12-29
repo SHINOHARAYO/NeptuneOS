@@ -1,4 +1,5 @@
 #include "kernel/console.h"
+#include "kernel/io.h"
 
 #include <stdint.h>
 #include <stddef.h>
@@ -14,6 +15,15 @@ static volatile uint16_t *const vga_buffer = (uint16_t *)VGA_BUFFER_ADDR;
 static uint8_t current_color = 0x0F; /* bright white on black */
 static uint8_t cursor_row = 0;
 static uint8_t cursor_col = 0;
+
+static void update_hw_cursor(void)
+{
+    uint16_t pos = (uint16_t)((cursor_row * VGA_COLS) + cursor_col);
+    outb(0x3D4, 0x0F);
+    outb(0x3D5, (uint8_t)(pos & 0xFF));
+    outb(0x3D4, 0x0E);
+    outb(0x3D5, (uint8_t)((pos >> 8) & 0xFF));
+}
 
 static void scroll_if_needed(void)
 {
@@ -54,6 +64,7 @@ static void put_char(char c)
         cursor_col = 0;
         ++cursor_row;
         scroll_if_needed();
+        update_hw_cursor();
         return;
     }
 
@@ -61,6 +72,25 @@ static void put_char(char c)
     const size_t index = (cursor_row * VGA_COLS) + cursor_col;
     vga_buffer[index] = ((uint16_t)current_color << 8) | (uint8_t)c;
     advance_cursor();
+    update_hw_cursor();
+}
+
+void console_backspace(void)
+{
+    if (cursor_row == 0 && cursor_col == 0) {
+        return;
+    }
+    if (cursor_col == 0) {
+        cursor_col = VGA_COLS - 1;
+        if (cursor_row > 0) {
+            --cursor_row;
+        }
+    } else {
+        --cursor_col;
+    }
+    const size_t index = (cursor_row * VGA_COLS) + cursor_col;
+    vga_buffer[index] = ((uint16_t)current_color << 8) | ' ';
+    update_hw_cursor();
 }
 
 void console_clear(uint8_t color)
@@ -71,6 +101,7 @@ void console_clear(uint8_t color)
     for (size_t i = 0; i < VGA_COLS * VGA_ROWS; ++i) {
         vga_buffer[i] = ((uint16_t)current_color << 8) | ' ';
     }
+    update_hw_cursor();
 }
 
 void console_set_color(uint8_t color)
@@ -81,6 +112,16 @@ void console_set_color(uint8_t color)
 void console_write(const char *msg)
 {
     for (size_t i = 0; msg[i] != '\0'; ++i) {
+        put_char(msg[i]);
+    }
+}
+
+void console_write_len(const char *msg, uint64_t len)
+{
+    if (!msg || len == 0) {
+        return;
+    }
+    for (uint64_t i = 0; i < len; ++i) {
         put_char(msg[i]);
     }
 }

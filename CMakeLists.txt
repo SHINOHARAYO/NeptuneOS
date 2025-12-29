@@ -15,6 +15,7 @@ set(KERNEL_SOURCES
     kernel/boot/boot.s
     kernel/arch/x86_64/gdt.s
     kernel/arch/x86_64/switch.s
+    kernel/arch/x86_64/syscall_stub.s
     kernel/arch/x86_64/gdt.c
     kernel/arch/x86_64/mmu.c
     kernel/arch/x86_64/paging.c
@@ -31,6 +32,10 @@ set(KERNEL_SOURCES
     kernel/heap.c
     kernel/mem.c
     kernel/printf.c
+    kernel/terminal.c
+    kernel/user.c
+    kernel/syscall.c
+    kernel/elf.c
     kernel/kernel.c
 )
 

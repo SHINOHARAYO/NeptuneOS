@@ -126,6 +126,22 @@ void mmu_reload_cr3(void)
     __asm__ volatile("mov %0, %%cr3" : : "r"(phys) : "memory");
 }
 
+uint64_t mmu_create_user_pml4(void)
+{
+    uint64_t phys = pmm_alloc_page();
+    if (!phys) {
+        return 0;
+    }
+    zero_page(phys);
+
+    uint64_t *new_pml4 = (uint64_t *)table_ptr(phys);
+    uint64_t *kernel_pml4 = pml4_high();
+    for (size_t i = 256; i < 512; ++i) {
+        new_pml4[i] = kernel_pml4[i];
+    }
+    return phys;
+}
+
 void mmu_map_hhdm_2m(uint64_t phys_start, uint64_t phys_end)
 {
     uint64_t start = align_down(phys_start, PAGE_SIZE_2M);
@@ -195,6 +211,48 @@ void mmu_map_page(uint64_t virt, uint64_t phys, uint64_t flags)
 
     pt[pt_index] = entry;
     invlpg(virt);
+}
+
+int mmu_map_page_in(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint64_t flags)
+{
+    if (!pml4_phys || (pml4_phys & 0xFFF) || (virt & 0xFFF) || (phys & 0xFFF)) {
+        return -1;
+    }
+
+    uint64_t *pml4 = (uint64_t *)table_ptr(pml4_phys);
+    uint16_t pml4_index = (virt >> 39) & 0x1FF;
+    uint16_t pdpt_index = (virt >> 30) & 0x1FF;
+    uint16_t pd_index = (virt >> 21) & 0x1FF;
+    uint16_t pt_index = (virt >> 12) & 0x1FF;
+
+    uint64_t *pdpt = ensure_table(pml4, pml4_index, flags);
+    uint64_t *pd = ensure_table(pdpt, pdpt_index, flags);
+    uint64_t *pt = ensure_table(pd, pd_index, flags);
+
+    uint64_t existing = pt[pt_index];
+    if (existing & PTE_PRESENT) {
+        uint64_t existing_phys = existing & ~0xFFFULL;
+        if (existing_phys != (phys & ~0xFFFULL)) {
+            return -1;
+        }
+    }
+
+    uint64_t entry = (phys & ~0xFFFULL) | PTE_PRESENT;
+    if (flags & MMU_FLAG_WRITE) {
+        entry |= PTE_RW;
+    }
+    if (flags & MMU_FLAG_USER) {
+        entry |= PTE_USER;
+    }
+    if (flags & MMU_FLAG_GLOBAL) {
+        entry |= (1ULL << 8);
+    }
+    if (flags & MMU_FLAG_NOEXEC) {
+        entry |= (1ULL << 63);
+    }
+
+    pt[pt_index] = entry;
+    return 0;
 }
 
 void mmu_unmap_page(uint64_t virt)

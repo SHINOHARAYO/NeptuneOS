@@ -10,6 +10,10 @@ Tiny higher-half x86_64 hobby kernel with Multiboot2 boot, GRUB ISO image, VGA c
 - Kernel heap with slab/large allocs, free coalescing, stats dump, and self-tests.
 - PIC remap + PIT timer ticks with IRQ handlers; keyboard and COM1 IRQ stubs unmasked.
 - Simple allocator self-test and timer tick validation at boot with verbose logs.
+- In-kernel terminal REPL with line input and basic built-in commands.
+- User-mode scaffolding: layout constants, per-process page tables, and ring3 entry helper.
+- int 0x80 syscall ABI with exit/yield/read/write and console/serial IO.
+- Minimal ELF64 loader for PT_LOAD segments into user address spaces.
 
 ## Prerequisites
 - CMake 3.16+
@@ -53,8 +57,7 @@ Console logs appear on VGA; duplicate logs are emitted to the serial port (shown
 
 ## TODO / Next Steps
 - Scheduler: add a basic round-robin scheduler with per-thread stacks, context switch, and tick-based preemption.
-- User mode: define a user virtual layout, ring 3 entry path, and per-process page tables.
-- Syscalls: implement a small syscall ABI (read/write/exit/yield/spawn or exec).
-- Loader: add a minimal ELF64 loader with user stack setup.
+- Syscalls: add spawn/exec, error codes, and user-mode handle table.
+- Loader: add user program image selection and stack arg/env setup.
 - Files/TTY: wire a console/TTY device and a tiny in-memory FS for stdin/stdout.
-- Shell: build a simple REPL with built-ins and command dispatch to user programs.
+- User shell: build a user-mode REPL with syscall-backed stdin/stdout and command dispatch.

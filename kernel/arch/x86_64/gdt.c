@@ -39,7 +39,7 @@ static inline void ltr(uint16_t selector)
 void gdt_relocate_heap(void)
 {
     /* Build a fresh GDT with code, data, and TSS entries on the heap. */
-    const size_t entries = 5; /* null, code, data, tss low, tss high */
+    const size_t entries = 7; /* null, kcode, kdata, ucode, udata, tss low, tss high */
     const size_t gdt_bytes = entries * sizeof(uint64_t);
     struct gdt_descriptor new_desc;
     uint64_t *new_table = (uint64_t *)kalloc_zero(gdt_bytes, 16);
@@ -52,6 +52,8 @@ void gdt_relocate_heap(void)
     new_table[0] = 0x0000000000000000ULL;         /* null */
     new_table[1] = 0x00af9a000000ffffULL;         /* code */
     new_table[2] = 0x00af92000000ffffULL;         /* data */
+    new_table[3] = 0x00affa000000ffffULL;         /* user code */
+    new_table[4] = 0x00aff2000000ffffULL;         /* user data */
 
     /* Set up TSS for kernel stack */
     uint64_t stack_ptr;
@@ -79,12 +81,17 @@ void gdt_relocate_heap(void)
     tss_low |= ((tss_base >> 24) & 0xFFULL) << 56;
     uint64_t tss_high = tss_base >> 32;
 
-    new_table[3] = tss_low;
-    new_table[4] = tss_high;
+    new_table[5] = tss_low;
+    new_table[6] = tss_high;
 
     new_desc.limit = (uint16_t)(gdt_bytes - 1);
     new_desc.base = (uint64_t)new_table;
     lgdt(&new_desc);
-    ltr(3 << 3); /* TSS selector */
+    ltr(GDT_TSS); /* TSS selector */
     log_info("GDT relocated to heap");
+}
+
+void gdt_set_kernel_stack(uint64_t rsp0)
+{
+    tss_kernel.rsp0 = rsp0;
 }

@@ -10,6 +10,8 @@
 #include "kernel/pit.h"
 #include "kernel/timer.h"
 #include "kernel/sched.h"
+#include "kernel/terminal.h"
+#include "kernel/user.h"
 
 #define VGA_PHYS 0xB8000ULL
 #define VGA_HIGHER_HALF (HIGHER_HALF_BASE + VGA_PHYS)
@@ -18,6 +20,7 @@
 #define ENABLE_NX_TEST 1
 #define ENABLE_TEXT_WP_TEST 1
 #define ENABLE_SECTION_PROTECT 1
+#define ENABLE_USER_SMOKE 1
 
 extern uint64_t pml4_table[];
 
@@ -128,7 +131,7 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
     };
     log_set_colors(&theme);
     console_clear(theme.default_color); /* ensure whole screen uses new colors */
-    log_set_level(LOG_LEVEL_DEBUG);
+    log_set_level(LOG_LEVEL_INFO);
     log_info("Booting 64-bit kernel...");
     log_debug("Multiboot info validated.");
     log_debug_hex("Multiboot2 info size", multiboot_size);
@@ -275,6 +278,14 @@ wp_resume:
     if (sched_create(worker_thread, (void *)2) != 0) {
         log_error("Failed to create worker thread 2");
     }
+    if (sched_create(terminal_thread, NULL) != 0) {
+        log_error("Failed to create terminal thread");
+    }
+#if ENABLE_USER_SMOKE
+    if (sched_create(user_smoke_thread, NULL) != 0) {
+        log_error("Failed to create user smoke thread");
+    }
+#endif
     if (sched_create(idle_thread, NULL) != 0) {
         log_error("Failed to create idle thread");
     }

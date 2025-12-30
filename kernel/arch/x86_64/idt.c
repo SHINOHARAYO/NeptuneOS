@@ -9,6 +9,7 @@
 #include "kernel/timer.h"
 #include "kernel/io.h"
 #include "kernel/irq.h"
+#include "kernel/sched.h"
 
 #include <stdint.h>
 
@@ -314,9 +315,9 @@ extern void isr_syscall(void);
 
 __attribute__((interrupt)) static void isr_irq0(struct interrupt_frame *frame)
 {
-    (void)frame;
     timer_on_tick();
     pic_send_eoi(0);
+    sched_request_preempt(frame);
 }
 
 __attribute__((interrupt)) static void isr_irq1(struct interrupt_frame *frame)

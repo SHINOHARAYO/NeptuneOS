@@ -21,6 +21,7 @@
 #define ENABLE_TEXT_WP_TEST 1
 #define ENABLE_SECTION_PROTECT 1
 #define ENABLE_USER_SMOKE 1
+#define ENABLE_KERNEL_TERMINAL 0
 
 extern uint64_t pml4_table[];
 
@@ -278,9 +279,11 @@ wp_resume:
     if (sched_create(worker_thread, (void *)2) != 0) {
         log_error("Failed to create worker thread 2");
     }
+#if ENABLE_KERNEL_TERMINAL
     if (sched_create(terminal_thread, NULL) != 0) {
         log_error("Failed to create terminal thread");
     }
+#endif
 #if ENABLE_USER_SMOKE
     if (sched_create(user_smoke_thread, NULL) != 0) {
         log_error("Failed to create user smoke thread");

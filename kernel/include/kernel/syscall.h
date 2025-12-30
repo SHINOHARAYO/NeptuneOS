@@ -9,6 +9,20 @@ enum {
     SYSCALL_YIELD = 2,
     SYSCALL_READ = 3,
     SYSCALL_WRITE = 4,
+    SYSCALL_OPEN = 5,
+    SYSCALL_CLOSE = 6,
+    SYSCALL_SPAWN = 7,
+    SYSCALL_EXEC = 8,
+};
+
+enum syscall_error {
+    SYSCALL_OK = 0,
+    SYSCALL_EINVAL = 1,
+    SYSCALL_ENOENT = 2,
+    SYSCALL_EBADF = 3,
+    SYSCALL_E2BIG = 4,
+    SYSCALL_ENOMEM = 5,
+    SYSCALL_EIO = 6,
 };
 
 struct syscall_regs {

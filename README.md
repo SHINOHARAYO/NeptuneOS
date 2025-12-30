@@ -12,8 +12,12 @@ Tiny higher-half x86_64 hobby kernel with Multiboot2 boot, GRUB ISO image, VGA c
 - Simple allocator self-test and timer tick validation at boot with verbose logs.
 - In-kernel terminal REPL with line input and basic built-in commands.
 - User-mode scaffolding: layout constants, per-process page tables, and ring3 entry helper.
-- int 0x80 syscall ABI with exit/yield/read/write and console/serial IO.
+- int 0x80 syscall ABI with exit/yield/read/write/open/close/spawn/exec, error codes, and handle table.
 - Minimal ELF64 loader for PT_LOAD segments into user address spaces.
+- Tiny in-memory FS for user images loaded by path with argv/env stack setup.
+- TTY-backed stdin/stdout with console/serial output.
+- User-mode shell REPL with syscall-backed IO and command dispatch.
+- Basic round-robin scheduler with per-thread stacks, context switch, and tick-based preemption.
 
 ## Prerequisites
 - CMake 3.16+
@@ -54,10 +58,3 @@ Console logs appear on VGA; duplicate logs are emitted to the serial port (shown
 - The PMM logs each managed region (start/end, usable pages) at boot to both console and serial.
 - After initialization, the identity map is dropped; only higher-half mappings remain. Avoid using low virtual addresses after that point.
 - Panic paths halt the CPU and emit messages to both VGA and serial for debugging.
-
-## TODO / Next Steps
-- Scheduler: add a basic round-robin scheduler with per-thread stacks, context switch, and tick-based preemption.
-- Syscalls: add spawn/exec, error codes, and user-mode handle table.
-- Loader: add user program image selection and stack arg/env setup.
-- Files/TTY: wire a console/TTY device and a tiny in-memory FS for stdin/stdout.
-- User shell: build a user-mode REPL with syscall-backed stdin/stdout and command dispatch.

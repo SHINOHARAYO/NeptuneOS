@@ -13,11 +13,15 @@ struct context {
     uint64_t rip;
 };
 
+struct interrupt_frame;
+
 void sched_init(void);
 int sched_create(void (*entry)(void *), void *arg);
 void sched_yield(void);
 void sched_start(void);
 void sched_on_tick(void);
 void sched_maybe_preempt(void);
+int sched_request_preempt(struct interrupt_frame *frame);
+void sched_preempt_trampoline(void);
 
 void context_switch(struct context *old_ctx, struct context *new_ctx);

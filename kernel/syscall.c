@@ -1,90 +1,180 @@
 #include "kernel/syscall.h"
-#include "kernel/console.h"
-#include "kernel/gdt.h"
-#include "kernel/idt.h"
-#include "kernel/irq.h"
+#include "kernel/fs.h"
+#include "kernel/heap.h"
 #include "kernel/log.h"
 #include "kernel/sched.h"
-#include "kernel/serial.h"
+#include "kernel/tty.h"
 #include "kernel/user.h"
 
 #include <stddef.h>
 #include <stdint.h>
 
-static const char scancode_map[128] = {
-    [0x02] = '1', [0x03] = '2', [0x04] = '3', [0x05] = '4',
-    [0x06] = '5', [0x07] = '6', [0x08] = '7', [0x09] = '8',
-    [0x0A] = '9', [0x0B] = '0', [0x0C] = '-', [0x0D] = '=',
-    [0x10] = 'q', [0x11] = 'w', [0x12] = 'e', [0x13] = 'r',
-    [0x14] = 't', [0x15] = 'y', [0x16] = 'u', [0x17] = 'i',
-    [0x18] = 'o', [0x19] = 'p', [0x1A] = '[', [0x1B] = ']',
-    [0x1E] = 'a', [0x1F] = 's', [0x20] = 'd', [0x21] = 'f',
-    [0x22] = 'g', [0x23] = 'h', [0x24] = 'j', [0x25] = 'k',
-    [0x26] = 'l', [0x27] = ';', [0x28] = '\'', [0x29] = '`',
-    [0x2B] = '\\',
-    [0x2C] = 'z', [0x2D] = 'x', [0x2E] = 'c', [0x2F] = 'v',
-    [0x30] = 'b', [0x31] = 'n', [0x32] = 'm', [0x33] = ',',
-    [0x34] = '.', [0x35] = '/',
-    [0x39] = ' ',
+enum handle_type {
+    HANDLE_FREE = 0,
+    HANDLE_TTY,
+    HANDLE_MEMFILE,
 };
 
-static const char scancode_shift_map[128] = {
-    [0x02] = '!', [0x03] = '@', [0x04] = '#', [0x05] = '$',
-    [0x06] = '%', [0x07] = '^', [0x08] = '&', [0x09] = '*',
-    [0x0A] = '(', [0x0B] = ')', [0x0C] = '_', [0x0D] = '+',
-    [0x10] = 'Q', [0x11] = 'W', [0x12] = 'E', [0x13] = 'R',
-    [0x14] = 'T', [0x15] = 'Y', [0x16] = 'U', [0x17] = 'I',
-    [0x18] = 'O', [0x19] = 'P', [0x1A] = '{', [0x1B] = '}',
-    [0x1E] = 'A', [0x1F] = 'S', [0x20] = 'D', [0x21] = 'F',
-    [0x22] = 'G', [0x23] = 'H', [0x24] = 'J', [0x25] = 'K',
-    [0x26] = 'L', [0x27] = ':', [0x28] = '"', [0x29] = '~',
-    [0x2B] = '|',
-    [0x2C] = 'Z', [0x2D] = 'X', [0x2E] = 'C', [0x2F] = 'V',
-    [0x30] = 'B', [0x31] = 'N', [0x32] = 'M', [0x33] = '<',
-    [0x34] = '>', [0x35] = '?',
-    [0x39] = ' ',
+struct handle {
+    enum handle_type type;
+    uint64_t offset;
+    const struct memfs_file *file;
 };
 
-static int shift_state = 0;
+#define HANDLE_MAX 16
 
-static int scancode_to_char(uint8_t sc, char *out)
+static struct handle handles[HANDLE_MAX];
+static int handles_ready = 0;
+
+static uint64_t syscall_error(enum syscall_error err)
 {
-    if (!out) {
+    return (uint64_t)(-(int64_t)err);
+}
+
+static void handles_init(void)
+{
+    for (int i = 0; i < HANDLE_MAX; ++i) {
+        handles[i].type = HANDLE_FREE;
+        handles[i].offset = 0;
+        handles[i].file = NULL;
+    }
+    handles[0].type = HANDLE_TTY;
+    handles[1].type = HANDLE_TTY;
+    handles[2].type = HANDLE_TTY;
+    handles_ready = 1;
+}
+
+static int handle_alloc(enum handle_type type, const struct memfs_file *file)
+{
+    for (int i = 0; i < HANDLE_MAX; ++i) {
+        if (handles[i].type == HANDLE_FREE) {
+            handles[i].type = type;
+            handles[i].offset = 0;
+            handles[i].file = file;
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int handle_valid(int fd)
+{
+    return fd >= 0 && fd < HANDLE_MAX && handles[fd].type != HANDLE_FREE;
+}
+
+static int streq(const char *a, const char *b)
+{
+    if (!a || !b) {
         return 0;
     }
-    if (sc == 0x2A || sc == 0x36) {
-        shift_state = 1;
+    while (*a && *b) {
+        if (*a != *b) {
+            return 0;
+        }
+        ++a;
+        ++b;
+    }
+    return *a == *b;
+}
+
+static int user_ptr_range(uint64_t ptr, uint64_t len)
+{
+    if (len == 0) {
         return 0;
     }
-    if (sc == 0xAA || sc == 0xB6) {
-        shift_state = 0;
+    if (ptr < USER_BASE) {
         return 0;
     }
-    if (sc & 0x80) {
+    if (ptr + len < ptr) {
         return 0;
     }
-    if (sc == 0x1C) {
-        *out = '\n';
-        return 1;
+    return (ptr + len) <= USER_STACK_TOP;
+}
+
+static int user_str_copy(const char *user, char *dst, uint64_t dst_len)
+{
+    if (!user || !dst || dst_len == 0) {
+        return -1;
     }
-    if (sc == 0x0E) {
-        *out = '\b';
-        return 1;
+    for (uint64_t i = 0; i + 1 < dst_len; ++i) {
+        uint64_t addr = (uint64_t)user + i;
+        if (!user_ptr_range(addr, 1)) {
+            return -1;
+        }
+        char c = user[i];
+        dst[i] = c;
+        if (c == '\0') {
+            return 0;
+        }
     }
-    char c = shift_state ? scancode_shift_map[sc] : scancode_map[sc];
-    if (!c) {
+    dst[dst_len - 1] = '\0';
+    return -1;
+}
+
+static int user_vec_copy(const char *const *user_vec,
+                         char storage[][USER_STR_MAX],
+                         const char **out_vec,
+                         uint64_t max)
+{
+    if (!out_vec) {
+        return -1;
+    }
+    if (!user_vec) {
+        out_vec[0] = NULL;
         return 0;
     }
-    *out = c;
-    return 1;
+    for (uint64_t i = 0; i < max; ++i) {
+        uint64_t addr = (uint64_t)(user_vec + i);
+        if (!user_ptr_range(addr, sizeof(uint64_t))) {
+            return -1;
+        }
+        const char *ptr = user_vec[i];
+        if (!ptr) {
+            out_vec[i] = NULL;
+            return 0;
+        }
+        if (user_str_copy(ptr, storage[i], USER_STR_MAX) != 0) {
+            return -1;
+        }
+        out_vec[i] = storage[i];
+    }
+    out_vec[max] = NULL;
+    return -1;
+}
+
+static int user_launch_fill(struct user_launch *launch,
+                            const char *path,
+                            const char *const *argv,
+                            const char *const *envp)
+{
+    if (!launch || !path) {
+        return -1;
+    }
+    if (user_str_copy(path, launch->path, sizeof(launch->path)) != 0) {
+        return -1;
+    }
+    if (user_vec_copy(argv, launch->argv_storage, launch->argv, USER_ARG_MAX) != 0) {
+        return -1;
+    }
+    if (!launch->argv[0]) {
+        launch->argv[0] = launch->path;
+        launch->argv[1] = NULL;
+    }
+    if (user_vec_copy(envp, launch->env_storage, launch->envp, USER_ENV_MAX) != 0) {
+        return -1;
+    }
+    return 0;
 }
 
 uint64_t syscall_handle(struct syscall_regs *regs, struct interrupt_frame *frame)
 {
     if (!regs) {
-        return (uint64_t)-1;
+        return syscall_error(SYSCALL_EINVAL);
     }
     (void)frame;
+    if (!handles_ready) {
+        handles_init();
+    }
 
     uint64_t num = regs->rax;
     switch (num) {
@@ -95,59 +185,120 @@ uint64_t syscall_handle(struct syscall_regs *regs, struct interrupt_frame *frame
     case SYSCALL_YIELD:
         sched_yield();
         return 0;
-    case SYSCALL_WRITE: {
-        uint64_t fd = regs->rdi;
-        const char *buf = (const char *)regs->rsi;
-        uint64_t len = regs->rdx;
-        if (!buf || len == 0) {
-            return 0;
-        }
-        if (fd != 1 && fd != 2) {
-            return (uint64_t)-1;
-        }
-        console_write_len(buf, len);
-        serial_write_len(buf, len);
-        return len;
-    }
     case SYSCALL_READ: {
-        uint64_t fd = regs->rdi;
+        int fd = (int)regs->rdi;
         char *buf = (char *)regs->rsi;
         uint64_t len = regs->rdx;
         if (!buf || len == 0) {
             return 0;
         }
-        if (fd != 0) {
-            return (uint64_t)-1;
+        if (!user_ptr_range((uint64_t)buf, len)) {
+            return syscall_error(SYSCALL_EINVAL);
         }
-        uint64_t count = 0;
-        while (count < len) {
-            uint8_t ch = 0;
-            if (irq_com_pop(&ch)) {
-                if (ch == '\r') {
-                    ch = '\n';
-                }
-                buf[count++] = (char)ch;
-                if (ch == '\n') {
-                    break;
-                }
-                continue;
-            }
-            uint8_t sc = 0;
-            if (irq_kb_pop(&sc)) {
-                char c;
-                if (scancode_to_char(sc, &c)) {
-                    buf[count++] = c;
-                    if (c == '\n') {
-                        break;
-                    }
-                }
-                continue;
-            }
-            break;
+        if (!handle_valid(fd)) {
+            return syscall_error(SYSCALL_EBADF);
         }
-        return count;
+        struct handle *h = &handles[fd];
+        if (h->type == HANDLE_TTY) {
+            return tty_read(buf, len);
+        }
+        if (h->type == HANDLE_MEMFILE) {
+            uint64_t read = memfs_read(h->file, h->offset, buf, len);
+            h->offset += read;
+            return read;
+        }
+        return syscall_error(SYSCALL_EBADF);
+    }
+    case SYSCALL_WRITE: {
+        int fd = (int)regs->rdi;
+        const char *buf = (const char *)regs->rsi;
+        uint64_t len = regs->rdx;
+        if (!buf || len == 0) {
+            return 0;
+        }
+        if (!user_ptr_range((uint64_t)buf, len)) {
+            return syscall_error(SYSCALL_EINVAL);
+        }
+        if (!handle_valid(fd)) {
+            return syscall_error(SYSCALL_EBADF);
+        }
+        struct handle *h = &handles[fd];
+        if (h->type == HANDLE_TTY) {
+            return tty_write(buf, len);
+        }
+        return syscall_error(SYSCALL_EBADF);
+    }
+    case SYSCALL_OPEN: {
+        const char *path = (const char *)regs->rdi;
+        char path_buf[USER_PATH_MAX];
+        if (!path) {
+            return syscall_error(SYSCALL_EINVAL);
+        }
+        if (user_str_copy(path, path_buf, sizeof(path_buf)) != 0) {
+            return syscall_error(SYSCALL_EINVAL);
+        }
+        if (streq(path_buf, "/dev/tty") || streq(path_buf, "/dev/console")) {
+            int fd = handle_alloc(HANDLE_TTY, NULL);
+            if (fd < 0) {
+                return syscall_error(SYSCALL_ENOMEM);
+            }
+            return (uint64_t)fd;
+        }
+        const struct memfs_file *file = memfs_lookup(path_buf);
+        if (!file) {
+            return syscall_error(SYSCALL_ENOENT);
+        }
+        int fd = handle_alloc(HANDLE_MEMFILE, file);
+        if (fd < 0) {
+            return syscall_error(SYSCALL_ENOMEM);
+        }
+        return (uint64_t)fd;
+    }
+    case SYSCALL_CLOSE: {
+        int fd = (int)regs->rdi;
+        if (!handle_valid(fd)) {
+            return syscall_error(SYSCALL_EBADF);
+        }
+        handles[fd].type = HANDLE_FREE;
+        handles[fd].offset = 0;
+        handles[fd].file = NULL;
+        return 0;
+    }
+    case SYSCALL_SPAWN: {
+        const char *path = (const char *)regs->rdi;
+        const char *const *argv = (const char *const *)regs->rsi;
+        const char *const *envp = (const char *const *)regs->rdx;
+        struct user_launch *launch = (struct user_launch *)kalloc_zero(sizeof(*launch), 16);
+        if (!launch) {
+            return syscall_error(SYSCALL_ENOMEM);
+        }
+        if (user_launch_fill(launch, path, argv, envp) != 0) {
+            kfree(launch);
+            return syscall_error(SYSCALL_EINVAL);
+        }
+        if (sched_create(user_launch_thread, launch) != 0) {
+            kfree(launch);
+            return syscall_error(SYSCALL_ENOMEM);
+        }
+        return 0;
+    }
+    case SYSCALL_EXEC: {
+        const char *path = (const char *)regs->rdi;
+        const char *const *argv = (const char *const *)regs->rsi;
+        const char *const *envp = (const char *const *)regs->rdx;
+        struct user_launch launch = {0};
+        if (user_launch_fill(&launch, path, argv, envp) != 0) {
+            return syscall_error(SYSCALL_EINVAL);
+        }
+        struct user_space space;
+        uint64_t user_sp = 0;
+        if (user_prepare_image(launch.path, launch.argv, launch.envp, &space, &user_sp) != 0) {
+            return syscall_error(SYSCALL_ENOENT);
+        }
+        user_enter(space.entry, user_sp, space.pml4_phys);
+        __builtin_unreachable();
     }
     default:
-        return (uint64_t)-1;
+        return syscall_error(SYSCALL_EINVAL);
     }
 }

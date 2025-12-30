@@ -1,6 +1,8 @@
 #include "kernel/user.h"
 #include "kernel/elf.h"
+#include "kernel/fs.h"
 #include "kernel/gdt.h"
+#include "kernel/heap.h"
 #include "kernel/log.h"
 #include "kernel/mem.h"
 #include "kernel/mmu.h"
@@ -10,79 +12,6 @@
 #include <stdint.h>
 
 #define USER_STACK_PAGE_SIZE 4096
-#define USER_ARG_MAX 8
-#define USER_ENV_MAX 8
-
-#define USER_ELF_SIZE 0x200
-#define USER_ELF_CODE_OFFSET 0x80
-#define USER_ELF_MSG_OFFSET 0x180
-#define USER_ELF_MSG_LEN 20
-
-struct user_image {
-    const char *name;
-    const uint8_t *data;
-    uint64_t size;
-};
-
-static const uint8_t user_elf[USER_ELF_SIZE] = {
-    0x7F, 'E', 'L', 'F', 0x02, 0x01, 0x01, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x02, 0x00, 0x3E, 0x00, 0x01, 0x00, 0x00, 0x00,
-    0x80, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x38, 0x00,
-    0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x01, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    [USER_ELF_CODE_OFFSET] = 0x48, 0xC7, 0xC0, 0x04, 0x00, 0x00, 0x00,
-    0x48, 0xC7, 0xC7, 0x01, 0x00, 0x00, 0x00,
-    0x48, 0xBE, 0x80, 0x01, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x48, 0xC7, 0xC2, 0x14, 0x00, 0x00, 0x00,
-    0xCD, 0x80,
-    0x48, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00,
-    0xCD, 0x80,
-    0xEB, 0xFE,
-    [USER_ELF_MSG_OFFSET] = 'H', 'e', 'l', 'l', 'o', ' ', 'f', 'r', 'o', 'm',
-    ' ', 'u', 's', 'e', 'r', ' ', 'E', 'L', 'F', '\n',
-};
-
-static const struct user_image user_images[] = {
-    { "hello", user_elf, sizeof(user_elf) },
-};
-
-static int streq(const char *a, const char *b)
-{
-    if (!a || !b) {
-        return 0;
-    }
-    while (*a && *b) {
-        if (*a != *b) {
-            return 0;
-        }
-        ++a;
-        ++b;
-    }
-    return *a == *b;
-}
-
-static const struct user_image *user_image_find(const char *name)
-{
-    if (!name) {
-        return NULL;
-    }
-    for (size_t i = 0; i < sizeof(user_images) / sizeof(user_images[0]); ++i) {
-        if (streq(user_images[i].name, name)) {
-            return &user_images[i];
-        }
-    }
-    return NULL;
-}
 
 static uint64_t str_len(const char *s)
 {
@@ -242,8 +171,8 @@ int user_stack_setup(struct user_space *space, const char *const *argv, const ch
         return -1;
     }
 
-    uint64_t argv_addr[USER_ARG_MAX] = {0};
-    uint64_t env_addr[USER_ENV_MAX] = {0};
+    uint64_t argv_addr[USER_ARG_MAX];
+    uint64_t env_addr[USER_ENV_MAX];
     uint64_t sp = space->stack_top;
 
     for (uint64_t i = 0; i < argc; ++i) {
@@ -280,6 +209,36 @@ int user_stack_setup(struct user_space *space, const char *const *argv, const ch
     }
 
     *out_sp = sp;
+    return 0;
+}
+
+int user_prepare_image(const char *path, const char *const *argv, const char *const *envp,
+                       struct user_space *space, uint64_t *out_sp)
+{
+    if (!path || !space || !out_sp) {
+        return -1;
+    }
+
+    if (user_space_init(space) != 0) {
+        return -1;
+    }
+
+    const struct memfs_file *image = memfs_lookup(path);
+    if (!image) {
+        return -1;
+    }
+    if (elf_load_user(image->data, image->size, space) != 0) {
+        return -1;
+    }
+
+    if (user_space_map_stack(space, 1) != 0) {
+        return -1;
+    }
+
+    if (user_stack_setup(space, argv, envp, out_sp) != 0) {
+        return -1;
+    }
+
     return 0;
 }
 
@@ -327,35 +286,35 @@ void user_smoke_thread(void *arg)
 {
     (void)arg;
     struct user_space space;
-    if (user_space_init(&space) != 0) {
-        log_error("user_smoke: init failed");
-        return;
-    }
-
-    const char *program = "hello";
-    const struct user_image *image = user_image_find(program);
-    if (!image) {
-        log_error("user_smoke: image not found");
-        return;
-    }
-    if (elf_load_user(image->data, image->size, &space) != 0) {
-        log_error("user_smoke: ELF load failed");
-        return;
-    }
-
-    if (user_space_map_stack(&space, 1) != 0) {
-        log_error("user_smoke: map stack failed");
-        return;
-    }
-
-    const char *argv[] = { program, "arg1", NULL };
+    const char *argv[] = { "/bin/shell", NULL };
     const char *envp[] = { "TERM=neptune", "USER=guest", NULL };
     uint64_t user_sp = 0;
-    if (user_stack_setup(&space, argv, envp, &user_sp) != 0) {
-        log_error("user_smoke: stack setup failed");
+
+    if (user_prepare_image("/bin/shell", argv, envp, &space, &user_sp) != 0) {
+        log_error("user_smoke: shell launch failed");
+        return;
+    }
+
+    log_info("Entering user-mode shell");
+    user_enter(space.entry, user_sp, space.pml4_phys);
+}
+
+void user_launch_thread(void *arg)
+{
+    struct user_launch *launch = (struct user_launch *)arg;
+    if (!launch) {
+        return;
+    }
+
+    struct user_space space;
+    uint64_t user_sp = 0;
+    if (user_prepare_image(launch->path, launch->argv, launch->envp, &space, &user_sp) != 0) {
+        log_error("user_launch: load failed");
+        kfree(launch);
         return;
     }
 
     log_info("Entering user-mode image");
+    kfree(launch);
     user_enter(space.entry, user_sp, space.pml4_phys);
 }

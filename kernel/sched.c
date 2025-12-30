@@ -1,6 +1,7 @@
 #include "kernel/sched.h"
 #include "kernel/heap.h"
 #include "kernel/log.h"
+#include "kernel/idt.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -31,6 +32,8 @@ static volatile uint8_t need_resched = 0;
 static uint64_t last_switch_tick = 0;
 static uint64_t time_slice_ticks = 5;
 static int sched_ready = 0;
+volatile uint8_t sched_preempt_pending = 0;
+uint64_t sched_preempt_target = 0;
 
 static void sched_exit(void);
 
@@ -163,4 +166,18 @@ void sched_maybe_preempt(void)
     if (need_resched) {
         sched_yield();
     }
+}
+
+int sched_request_preempt(struct interrupt_frame *frame)
+{
+    if (!sched_ready || !need_resched || !frame) {
+        return 0;
+    }
+    if (sched_preempt_pending) {
+        return 0;
+    }
+    sched_preempt_pending = 1;
+    sched_preempt_target = frame->rip;
+    frame->rip = (uint64_t)sched_preempt_trampoline;
+    return 1;
 }

@@ -11,6 +11,7 @@ struct context {
     uint64_t rbp;
     uint64_t rsp;
     uint64_t rip;
+    uint64_t rflags;
 };
 
 struct interrupt_frame;
@@ -23,5 +24,7 @@ void sched_on_tick(void);
 void sched_maybe_preempt(void);
 int sched_request_preempt(struct interrupt_frame *frame);
 void sched_preempt_trampoline(void);
+void sched_exit_current(void) __attribute__((noreturn));
+void sched_set_current_aspace(uint64_t pml4_phys);
 
 void context_switch(struct context *old_ctx, struct context *new_ctx);

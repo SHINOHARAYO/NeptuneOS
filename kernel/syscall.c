@@ -295,6 +295,7 @@ uint64_t syscall_handle(struct syscall_regs *regs, struct interrupt_frame *frame
         if (user_prepare_image(launch.path, launch.argv, launch.envp, &space, &user_sp) != 0) {
             return syscall_error(SYSCALL_ENOENT);
         }
+        sched_set_current_aspace(space.pml4_phys);
         user_enter(space.entry, user_sp, space.pml4_phys);
         __builtin_unreachable();
     }

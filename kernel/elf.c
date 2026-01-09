@@ -123,7 +123,11 @@ int elf_load_user(const void *image, uint64_t size, struct user_space *space)
 
         uint64_t seg_start = align_down(ph->p_vaddr, 4096);
         uint64_t seg_end = align_up(ph->p_vaddr + ph->p_memsz, 4096);
-        if (seg_start < USER_BASE || seg_end > USER_STACK_TOP) {
+        uint64_t load_min = USER_BASE;
+        if (load_min >= 0x1000) {
+            load_min -= 0x1000;
+        }
+        if (seg_start < load_min || seg_end > USER_STACK_TOP) {
             return -1;
         }
 

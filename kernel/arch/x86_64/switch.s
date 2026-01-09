@@ -2,6 +2,9 @@
 .globl context_switch
 .type context_switch, @function
 context_switch:
+    pushfq
+    pop %rax
+    mov %rax, 0x40(%rdi)
     mov %r15, 0x00(%rdi)
     mov %r14, 0x08(%rdi)
     mov %r13, 0x10(%rdi)
@@ -20,6 +23,9 @@ context_switch:
     mov 0x28(%rsi), %rbp
     mov 0x30(%rsi), %rsp
     mov 0x38(%rsi), %rax
+    mov 0x40(%rsi), %rdx
+    push %rdx
+    popfq
     jmp *%rax
 1:
     ret

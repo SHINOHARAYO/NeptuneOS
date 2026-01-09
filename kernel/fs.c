@@ -7,10 +7,7 @@ extern const uint64_t user_image_hello_len;
 extern const uint8_t user_image_shell[];
 extern const uint64_t user_image_shell_len;
 
-static struct memfs_file memfs_files[] = {
-    { "/bin/hello", user_image_hello, 0 },
-    { "/bin/shell", user_image_shell, 0 },
-};
+static struct memfs_file memfs_files[2];
 static int memfs_ready = 0;
 
 static void memfs_init(void)
@@ -18,7 +15,11 @@ static void memfs_init(void)
     if (memfs_ready) {
         return;
     }
+    memfs_files[0].path = "/bin/hello";
+    memfs_files[0].data = user_image_hello;
     memfs_files[0].size = user_image_hello_len;
+    memfs_files[1].path = "/bin/shell";
+    memfs_files[1].data = user_image_shell;
     memfs_files[1].size = user_image_shell_len;
     memfs_ready = 1;
 }

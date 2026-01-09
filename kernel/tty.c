@@ -1,6 +1,7 @@
 #include "kernel/tty.h"
 #include "kernel/console.h"
 #include "kernel/irq.h"
+#include "kernel/sched.h"
 #include "kernel/serial.h"
 
 #include <stdint.h>
@@ -120,7 +121,7 @@ uint64_t tty_read(char *buf, uint64_t len)
             }
             continue;
         }
-        break;
+        sched_yield();
     }
     return count;
 }

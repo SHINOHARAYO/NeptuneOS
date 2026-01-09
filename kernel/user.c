@@ -7,6 +7,7 @@
 #include "kernel/mem.h"
 #include "kernel/mmu.h"
 #include "kernel/sched.h"
+#include "kernel/terminal.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -90,10 +91,15 @@ static int push_string(struct user_space *space, uint64_t *sp, const char *s, ui
 void user_exit_handler(void)
 {
     log_info("User-mode exited to kernel");
-    __asm__ volatile("sti");
-    for (;;) {
-        sched_yield();
+    mmu_reload_cr3();
+    static int terminal_started = 0;
+    if (!terminal_started) {
+        terminal_started = 1;
+        if (sched_create(terminal_thread, NULL) != 0) {
+            log_error("Failed to start kernel terminal");
+        }
     }
+    sched_exit_current();
 }
 
 int user_space_init(struct user_space *space)
@@ -220,22 +226,27 @@ int user_prepare_image(const char *path, const char *const *argv, const char *co
     }
 
     if (user_space_init(space) != 0) {
+        log_error("user_prepare: init failed");
         return -1;
     }
 
     const struct memfs_file *image = memfs_lookup(path);
     if (!image) {
+        log_error("user_prepare: image not found");
         return -1;
     }
     if (elf_load_user(image->data, image->size, space) != 0) {
+        log_error("user_prepare: ELF load failed");
         return -1;
     }
 
     if (user_space_map_stack(space, 1) != 0) {
+        log_error("user_prepare: map stack failed");
         return -1;
     }
 
     if (user_stack_setup(space, argv, envp, out_sp) != 0) {
+        log_error("user_prepare: stack setup failed");
         return -1;
     }
 
@@ -296,6 +307,7 @@ void user_smoke_thread(void *arg)
     }
 
     log_info("Entering user-mode shell");
+    sched_set_current_aspace(space.pml4_phys);
     user_enter(space.entry, user_sp, space.pml4_phys);
 }
 
@@ -316,5 +328,6 @@ void user_launch_thread(void *arg)
 
     log_info("Entering user-mode image");
     kfree(launch);
+    sched_set_current_aspace(space.pml4_phys);
     user_enter(space.entry, user_sp, space.pml4_phys);
 }

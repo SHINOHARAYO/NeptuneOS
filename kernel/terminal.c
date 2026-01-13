@@ -1,8 +1,10 @@
 #include "kernel/terminal.h"
 #include "kernel/console.h"
 #include "kernel/irq.h"
+#include "kernel/pci.h"
 #include "kernel/sched.h"
 #include "kernel/timer.h"
+#include "kernel/acpi.h"
 
 #include <stdint.h>
 
@@ -71,7 +73,7 @@ static void terminal_execute(const char *line)
         return;
     }
     if (streq(line, "help")) {
-        console_write("Commands: help, clear, ticks\n");
+        console_write("Commands: help, clear, ticks, lspci, acpi\n");
         terminal_prompt();
         return;
     }
@@ -84,6 +86,16 @@ static void terminal_execute(const char *line)
         console_write("ticks=");
         console_write_hex(timer_get_ticks());
         console_write("\n");
+        terminal_prompt();
+        return;
+    }
+    if (streq(line, "lspci")) {
+        pci_dump();
+        terminal_prompt();
+        return;
+    }
+    if (streq(line, "acpi")) {
+        acpi_dump();
         terminal_prompt();
         return;
     }

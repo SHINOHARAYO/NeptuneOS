@@ -9,6 +9,7 @@
 #define MMU_FLAG_USER  0x4ULL
 #define MMU_FLAG_NOEXEC (1ULL << 63)
 #define MMU_FLAG_GLOBAL (1ULL << 8)
+#define MMU_FLAG_COW (1ULL << 9)
 
 static inline uint64_t phys_to_higher_half(uint64_t phys)
 {

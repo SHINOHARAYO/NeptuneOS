@@ -1,10 +1,14 @@
 #include "kernel/console.h"
+#include "kernel/block.h"
+#include "kernel/fat.h"
 #include "kernel/idt.h"
 #include "kernel/log.h"
 #include "kernel/mem.h"
 #include "kernel/panic.h"
 #include "kernel/mmu.h"
 #include "kernel/heap.h"
+#include "kernel/pci.h"
+#include "kernel/acpi.h"
 #include "kernel/gdt.h"
 #include "kernel/pic.h"
 #include "kernel/pit.h"
@@ -166,9 +170,31 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
     log_info("Initializing kernel heap...");
     kheap_init();
     log_info("Kernel heap initialized.");
+    block_init();
+    log_info("Block devices initialized.");
+    struct block_device *block = block_get_default();
+    if (fat_init(block) == 0) {
+        log_info("FAT16 volume mounted.");
+    } else {
+        struct block_device *ramdisk = block_get_ramdisk();
+        if (ramdisk && ramdisk != block) {
+            log_warn("FAT16 volume not found; falling back to ramdisk.");
+            block_set_default(ramdisk);
+            if (fat_init(ramdisk) == 0) {
+                log_info("FAT16 volume mounted.");
+            } else {
+                log_warn("FAT16 volume not found.");
+            }
+        } else {
+            log_warn("FAT16 volume not found.");
+        }
+    }
     kalloc_enable_frees();
     log_info("Kernel heap free tracking enabled.");
     heap_verify_checkpoint("Heap verified after heap init");
+
+    pci_init();
+    acpi_init();
 
     log_info("Relocating GDT...");
     gdt_relocate_heap();
@@ -285,7 +311,7 @@ wp_resume:
     }
 #endif
 #if ENABLE_USER_SMOKE
-    if (sched_create(user_smoke_thread, NULL) != 0) {
+    if (sched_create_user(user_smoke_thread, NULL, 0, NULL) != 0) {
         log_error("Failed to create user smoke thread");
     }
 #endif

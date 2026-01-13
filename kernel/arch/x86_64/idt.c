@@ -10,6 +10,8 @@
 #include "kernel/io.h"
 #include "kernel/irq.h"
 #include "kernel/sched.h"
+#include "kernel/user.h"
+#include "kernel/mem.h"
 
 #include <stdint.h>
 
@@ -36,6 +38,133 @@ static volatile uint64_t expected_pf_addr = 0;
 static volatile uint64_t expected_pf_resume = 0;
 static volatile uint8_t expected_pf_active = 0;
 static volatile uint8_t expected_pf_hit = 0;
+
+static inline void invlpg_page(uint64_t virt)
+{
+    __asm__ volatile("invlpg (%0)" ::"r"(virt) : "memory");
+}
+
+#define USER_STACK_GUARD_PAGES 4
+
+#define PTE_PRESENT 0x1ULL
+#define PTE_RW 0x2ULL
+#define PTE_USER 0x4ULL
+#define PTE_PS 0x80ULL
+#define PTE_COW (1ULL << 9)
+
+static uint64_t *pte_lookup(uint64_t pml4_phys, uint64_t virt)
+{
+    uint64_t *pml4 = (uint64_t *)phys_to_hhdm(pml4_phys);
+    uint16_t pml4_index = (virt >> 39) & 0x1FF;
+    uint16_t pdpt_index = (virt >> 30) & 0x1FF;
+    uint16_t pd_index = (virt >> 21) & 0x1FF;
+    uint16_t pt_index = (virt >> 12) & 0x1FF;
+
+    uint64_t pml4e = pml4[pml4_index];
+    if (!(pml4e & PTE_PRESENT)) {
+        return NULL;
+    }
+    uint64_t *pdpt = (uint64_t *)phys_to_hhdm(pml4e & ~0xFFFULL);
+    uint64_t pdpte = pdpt[pdpt_index];
+    if (!(pdpte & PTE_PRESENT) || (pdpte & PTE_PS)) {
+        return NULL;
+    }
+    uint64_t *pd = (uint64_t *)phys_to_hhdm(pdpte & ~0xFFFULL);
+    uint64_t pde = pd[pd_index];
+    if (!(pde & PTE_PRESENT) || (pde & PTE_PS)) {
+        return NULL;
+    }
+    uint64_t *pt = (uint64_t *)phys_to_hhdm(pde & ~0xFFFULL);
+    return &pt[pt_index];
+}
+
+static int handle_user_cow_fault(uint64_t aspace, uint64_t page)
+{
+    uint64_t *pte = pte_lookup(aspace, page);
+    if (!pte) {
+        return 0;
+    }
+    uint64_t entry = *pte;
+    if (!(entry & PTE_PRESENT) || !(entry & PTE_COW)) {
+        return 0;
+    }
+    uint64_t old_phys = entry & ~0xFFFULL;
+    uint64_t new_phys = pmm_alloc_page();
+    if (!new_phys) {
+        return 0;
+    }
+    uint8_t *dst = (uint8_t *)phys_to_hhdm(new_phys);
+    uint8_t *src = (uint8_t *)phys_to_hhdm(old_phys);
+    for (uint64_t i = 0; i < 4096; ++i) {
+        dst[i] = src[i];
+    }
+    uint64_t flags = entry & 0xFFFULL;
+    flags |= PTE_RW;
+    flags &= ~PTE_COW;
+    *pte = (new_phys & ~0xFFFULL) | flags | (entry & (1ULL << 63));
+    invlpg_page(page);
+    return 1;
+}
+
+static uint64_t get_zero_page(void)
+{
+    static uint64_t zero_phys = 0;
+    if (zero_phys) {
+        return zero_phys;
+    }
+    uint64_t phys = pmm_alloc_page();
+    if (!phys) {
+        return 0;
+    }
+    uint8_t *dst = (uint8_t *)phys_to_hhdm(phys);
+    for (uint64_t i = 0; i < 4096; ++i) {
+        dst[i] = 0;
+    }
+    zero_phys = phys;
+    return zero_phys;
+}
+
+static int handle_user_page_fault(uint64_t cr2, uint64_t err, uint64_t rsp)
+{
+    uint64_t page = cr2 & ~0xFFFULL;
+    uint64_t aspace = sched_current_aspace();
+    if (!aspace) {
+        return 0;
+    }
+    const uint64_t PF_PRESENT = 0x1;
+    const uint64_t PF_WRITE = 0x2;
+    if (err & PF_PRESENT) {
+        if (err & PF_WRITE) {
+            return handle_user_cow_fault(aspace, page);
+        }
+        return 0;
+    }
+    uint64_t stack_low = USER_STACK_TOP - (USER_STACK_MAX_PAGES * 4096ULL);
+    if (page < stack_low || page >= USER_STACK_TOP) {
+        return 0;
+    }
+    if (rsp < stack_low || rsp >= USER_STACK_TOP) {
+        return 0;
+    }
+    uint64_t guard = USER_STACK_GUARD_PAGES * 4096ULL;
+    uint64_t min = (rsp > guard) ? (rsp - guard) : stack_low;
+    if (min < stack_low) {
+        min = stack_low;
+    }
+    if (page < min) {
+        return 0;
+    }
+    uint64_t phys = get_zero_page();
+    if (!phys) {
+        return 0;
+    }
+    if (mmu_map_page_in(aspace, page, phys,
+                        MMU_FLAG_USER | MMU_FLAG_NOEXEC | MMU_FLAG_COW) != 0) {
+        return 0;
+    }
+    invlpg_page(page);
+    return 1;
+}
 
 void idt_expect_page_fault(uint64_t addr, uint64_t resume_rip)
 {
@@ -269,12 +398,24 @@ static void exception_handler(const char *label, uint8_t vec, uint64_t err, uint
         return;
     }
 
+    if (vec == 14 && frame && (frame->cs & 0x3)) {
+        if (handle_user_page_fault(cr2, err, frame->rsp)) {
+            return;
+        }
+    }
+
     log_exception(label, vec, err, has_err, rip);
 
     if (vec == 14) {
         log_page_fault_details(cr2, err);
     }
     dump_regs(frame, err, cr2, vec, has_err);
+
+    if (frame && (frame->cs & 0x3)) {
+        log_warn("User-mode exception; terminating user task");
+        user_exit_handler();
+        __builtin_unreachable();
+    }
 
     panic(label, code ? code : cr2);
 }

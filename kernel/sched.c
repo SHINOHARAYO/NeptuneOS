@@ -23,6 +23,12 @@ struct thread {
     uint8_t *stack;
     enum thread_state state;
     uint64_t aspace;
+    uint8_t exit_to_kernel;
+    int pid;
+    int ppid;
+    int exit_code;
+    uint8_t is_user;
+    uint8_t reaped;
 };
 
 static struct thread threads[MAX_THREADS];
@@ -36,8 +42,25 @@ static uint64_t time_slice_ticks = 5;
 static int sched_ready = 0;
 volatile uint8_t sched_preempt_pending = 0;
 uint64_t sched_preempt_target = 0;
+static int next_pid = 1;
 
 static void sched_exit(void);
+
+static int alloc_thread_index(void)
+{
+    for (size_t i = 0; i < thread_count; ++i) {
+        if (threads[i].state == THREAD_UNUSED) {
+            return (int)i;
+        }
+        if (threads[i].state == THREAD_DEAD && threads[i].reaped) {
+            return (int)i;
+        }
+    }
+    if (thread_count < MAX_THREADS) {
+        return (int)thread_count++;
+    }
+    return -1;
+}
 
 static void sched_exit(void)
 {
@@ -85,6 +108,12 @@ void sched_init(void)
     current_thread = &threads[0];
     current_thread->state = THREAD_RUNNING;
     current_thread->aspace = 0;
+    current_thread->exit_to_kernel = 0;
+    current_thread->pid = 0;
+    current_thread->ppid = 0;
+    current_thread->exit_code = 0;
+    current_thread->is_user = 0;
+    current_thread->reaped = 1;
     sched_ticks = 0;
     need_resched = 0;
     last_switch_tick = 0;
@@ -93,16 +122,26 @@ void sched_init(void)
 
 int sched_create(void (*entry)(void *), void *arg)
 {
-    if (!entry || thread_count >= MAX_THREADS) {
+    if (!entry) {
         return -1;
     }
 
-    struct thread *thread = &threads[thread_count];
+    int idx = alloc_thread_index();
+    if (idx < 0) {
+        return -1;
+    }
+    struct thread *thread = &threads[idx];
     *thread = (struct thread){0};
     thread->entry = entry;
     thread->arg = arg;
     thread->state = THREAD_RUNNABLE;
     thread->aspace = 0;
+    thread->exit_to_kernel = 0;
+    thread->pid = 0;
+    thread->ppid = 0;
+    thread->exit_code = 0;
+    thread->is_user = 0;
+    thread->reaped = 1;
 
     thread->stack = (uint8_t *)kalloc_zero(STACK_SIZE, 16);
     if (!thread->stack) {
@@ -117,7 +156,48 @@ int sched_create(void (*entry)(void *), void *arg)
     thread->ctx.rip = (uint64_t)thread_trampoline;
     thread->ctx.rflags = 0x202;
 
-    ++thread_count;
+    return 0;
+}
+
+int sched_create_user(void (*entry)(void *), void *arg, int parent_pid, int *out_pid)
+{
+    if (!entry) {
+        return -1;
+    }
+
+    int idx = alloc_thread_index();
+    if (idx < 0) {
+        return -1;
+    }
+    struct thread *thread = &threads[idx];
+    *thread = (struct thread){0};
+    thread->entry = entry;
+    thread->arg = arg;
+    thread->state = THREAD_RUNNABLE;
+    thread->aspace = 0;
+    thread->exit_to_kernel = 0;
+    thread->pid = next_pid++;
+    thread->ppid = parent_pid;
+    thread->exit_code = 0;
+    thread->is_user = 1;
+    thread->reaped = 0;
+
+    thread->stack = (uint8_t *)kalloc_zero(STACK_SIZE, 16);
+    if (!thread->stack) {
+        log_error("sched_create_user: stack alloc failed");
+        return -1;
+    }
+
+    uint64_t stack_top = (uint64_t)thread->stack + STACK_SIZE;
+    stack_top = (stack_top & ~0xFULL) - 8;
+    *(uint64_t *)stack_top = 0;
+    thread->ctx.rsp = stack_top;
+    thread->ctx.rip = (uint64_t)thread_trampoline;
+    thread->ctx.rflags = 0x202;
+
+    if (out_pid) {
+        *out_pid = thread->pid;
+    }
     return 0;
 }
 
@@ -181,6 +261,83 @@ void sched_set_current_aspace(uint64_t pml4_phys)
     }
 }
 
+void sched_set_current_exit_to_kernel(int enable)
+{
+    if (current_thread) {
+        current_thread->exit_to_kernel = enable ? 1 : 0;
+    }
+}
+
+int sched_current_exit_to_kernel(void)
+{
+    if (!current_thread) {
+        return 0;
+    }
+    return current_thread->exit_to_kernel ? 1 : 0;
+}
+
+uint64_t sched_current_aspace(void)
+{
+    if (!current_thread) {
+        return 0;
+    }
+    return current_thread->aspace;
+}
+
+int sched_current_pid(void)
+{
+    if (!current_thread) {
+        return 0;
+    }
+    return current_thread->pid;
+}
+
+void sched_set_current_exit_code(int code)
+{
+    if (current_thread) {
+        current_thread->exit_code = code;
+    }
+}
+
+int sched_wait_child(int parent_pid, int *out_code)
+{
+    if (parent_pid < 0) {
+        return -1;
+    }
+    for (;;) {
+        int has_child = 0;
+        for (size_t i = 0; i < thread_count; ++i) {
+            struct thread *thread = &threads[i];
+            if (!thread->is_user || thread->ppid != parent_pid) {
+                continue;
+            }
+            has_child = 1;
+            if (thread->state == THREAD_DEAD && !thread->reaped) {
+                thread->reaped = 1;
+                if (out_code) {
+                    *out_code = thread->exit_code;
+                }
+                return thread->pid;
+            }
+        }
+        if (!has_child) {
+            return -1;
+        }
+        sched_yield();
+    }
+}
+
+void sched_kill_user_threads(void)
+{
+    for (size_t i = 0; i < thread_count; ++i) {
+        if (threads[i].aspace) {
+            threads[i].state = THREAD_DEAD;
+            threads[i].aspace = 0;
+            threads[i].reaped = 1;
+        }
+    }
+}
+
 void sched_on_tick(void)
 {
     if (!sched_ready) {
@@ -208,6 +365,9 @@ int sched_request_preempt(struct interrupt_frame *frame)
         return 0;
     }
     if ((frame->cs & 0x3) != 0) {
+        return 0;
+    }
+    if (current_thread && current_thread->aspace) {
         return 0;
     }
     if (sched_preempt_pending) {

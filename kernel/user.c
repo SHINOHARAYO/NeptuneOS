@@ -7,6 +7,7 @@
 #include "kernel/mem.h"
 #include "kernel/mmu.h"
 #include "kernel/sched.h"
+#include "kernel/syscall.h"
 #include "kernel/terminal.h"
 
 #include <stddef.h>
@@ -88,18 +89,31 @@ static int push_string(struct user_space *space, uint64_t *sp, const char *s, ui
     return 0;
 }
 
-void user_exit_handler(void)
+__attribute__((noreturn)) static void user_exit_common(int code)
 {
     log_info("User-mode exited to kernel");
+    sched_set_current_exit_code(code);
+    syscall_cleanup_handles_for_pid(sched_current_pid());
     mmu_reload_cr3();
     static int terminal_started = 0;
-    if (!terminal_started) {
+    if (!terminal_started && sched_current_exit_to_kernel()) {
+        sched_kill_user_threads();
         terminal_started = 1;
         if (sched_create(terminal_thread, NULL) != 0) {
             log_error("Failed to start kernel terminal");
         }
     }
     sched_exit_current();
+}
+
+void user_exit_handler(void)
+{
+    user_exit_common(0);
+}
+
+void user_exit_with_code(int code)
+{
+    user_exit_common(code);
 }
 
 int user_space_init(struct user_space *space)
@@ -297,17 +311,18 @@ void user_smoke_thread(void *arg)
 {
     (void)arg;
     struct user_space space;
-    const char *argv[] = { "/bin/shell", NULL };
+    const char *argv[] = { "/bin/init", NULL };
     const char *envp[] = { "TERM=neptune", "USER=guest", NULL };
     uint64_t user_sp = 0;
 
-    if (user_prepare_image("/bin/shell", argv, envp, &space, &user_sp) != 0) {
-        log_error("user_smoke: shell launch failed");
+    if (user_prepare_image("/bin/init", argv, envp, &space, &user_sp) != 0) {
+        log_error("user_smoke: init launch failed");
         return;
     }
 
-    log_info("Entering user-mode shell");
+    log_info("Entering user-mode init");
     sched_set_current_aspace(space.pml4_phys);
+    sched_set_current_exit_to_kernel(1);
     user_enter(space.entry, user_sp, space.pml4_phys);
 }
 
@@ -329,5 +344,6 @@ void user_launch_thread(void *arg)
     log_info("Entering user-mode image");
     kfree(launch);
     sched_set_current_aspace(space.pml4_phys);
+    sched_set_current_exit_to_kernel(0);
     user_enter(space.entry, user_sp, space.pml4_phys);
 }

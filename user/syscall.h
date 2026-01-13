@@ -11,6 +11,8 @@ enum {
     SYSCALL_CLOSE = 6,
     SYSCALL_SPAWN = 7,
     SYSCALL_EXEC = 8,
+    SYSCALL_GETPID = 9,
+    SYSCALL_WAIT = 10,
 };
 
 static inline long syscall3(long num, long a1, long a2, long a3)
@@ -62,4 +64,14 @@ static inline long sys_spawn(const char *path, const char *const *argv, const ch
 static inline long sys_exec(const char *path, const char *const *argv, const char *const *envp)
 {
     return syscall3(SYSCALL_EXEC, (long)path, (long)argv, (long)envp);
+}
+
+static inline long sys_getpid(void)
+{
+    return syscall3(SYSCALL_GETPID, 0, 0, 0);
+}
+
+static inline long sys_wait(int *status)
+{
+    return syscall3(SYSCALL_WAIT, (long)status, 0, 0);
 }

@@ -1,10 +1,10 @@
 #include "kernel/syscall.h"
-#include "kernel/fs.h"
 #include "kernel/heap.h"
 #include "kernel/log.h"
 #include "kernel/sched.h"
 #include "kernel/tty.h"
 #include "kernel/user.h"
+#include "kernel/vfs.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -12,13 +12,13 @@
 enum handle_type {
     HANDLE_FREE = 0,
     HANDLE_TTY,
-    HANDLE_MEMFILE,
+    HANDLE_VFS,
 };
 
 struct handle {
     enum handle_type type;
-    uint64_t offset;
-    const struct memfs_file *file;
+    struct vfs_file *file;
+    int owner_pid;
 };
 
 #define HANDLE_MAX 16
@@ -35,22 +35,25 @@ static void handles_init(void)
 {
     for (int i = 0; i < HANDLE_MAX; ++i) {
         handles[i].type = HANDLE_FREE;
-        handles[i].offset = 0;
         handles[i].file = NULL;
+        handles[i].owner_pid = 0;
     }
     handles[0].type = HANDLE_TTY;
     handles[1].type = HANDLE_TTY;
     handles[2].type = HANDLE_TTY;
+    handles[0].owner_pid = 0;
+    handles[1].owner_pid = 0;
+    handles[2].owner_pid = 0;
     handles_ready = 1;
 }
 
-static int handle_alloc(enum handle_type type, const struct memfs_file *file)
+static int handle_alloc(enum handle_type type, struct vfs_file *file, int owner_pid)
 {
     for (int i = 0; i < HANDLE_MAX; ++i) {
         if (handles[i].type == HANDLE_FREE) {
             handles[i].type = type;
-            handles[i].offset = 0;
             handles[i].file = file;
+            handles[i].owner_pid = owner_pid;
             return i;
         }
     }
@@ -59,7 +62,29 @@ static int handle_alloc(enum handle_type type, const struct memfs_file *file)
 
 static int handle_valid(int fd)
 {
-    return fd >= 0 && fd < HANDLE_MAX && handles[fd].type != HANDLE_FREE;
+    if (fd < 0 || fd >= HANDLE_MAX || handles[fd].type == HANDLE_FREE) {
+        return 0;
+    }
+    int pid = sched_current_pid();
+    return handles[fd].owner_pid == 0 || handles[fd].owner_pid == pid;
+}
+
+void syscall_cleanup_handles_for_pid(int pid)
+{
+    if (pid <= 0) {
+        return;
+    }
+    for (int i = 0; i < HANDLE_MAX; ++i) {
+        if (handles[i].type == HANDLE_FREE || handles[i].owner_pid != pid) {
+            continue;
+        }
+        if (handles[i].type == HANDLE_VFS) {
+            vfs_close(handles[i].file);
+        }
+        handles[i].type = HANDLE_FREE;
+        handles[i].file = NULL;
+        handles[i].owner_pid = 0;
+    }
 }
 
 static int streq(const char *a, const char *b)
@@ -180,7 +205,7 @@ uint64_t syscall_handle(struct syscall_regs *regs, struct interrupt_frame *frame
     switch (num) {
     case SYSCALL_EXIT:
         log_info("Syscall exit");
-        user_exit_handler();
+        user_exit_with_code((int)regs->rdi);
         __builtin_unreachable();
     case SYSCALL_YIELD:
         sched_yield();
@@ -202,10 +227,12 @@ uint64_t syscall_handle(struct syscall_regs *regs, struct interrupt_frame *frame
         if (h->type == HANDLE_TTY) {
             return tty_read(buf, len);
         }
-        if (h->type == HANDLE_MEMFILE) {
-            uint64_t read = memfs_read(h->file, h->offset, buf, len);
-            h->offset += read;
-            return read;
+        if (h->type == HANDLE_VFS) {
+            int64_t read = vfs_read(h->file, buf, len);
+            if (read < 0) {
+                return syscall_error((enum syscall_error)(-read));
+            }
+            return (uint64_t)read;
         }
         return syscall_error(SYSCALL_EBADF);
     }
@@ -226,6 +253,13 @@ uint64_t syscall_handle(struct syscall_regs *regs, struct interrupt_frame *frame
         if (h->type == HANDLE_TTY) {
             return tty_write(buf, len);
         }
+        if (h->type == HANDLE_VFS) {
+            int64_t wrote = vfs_write(h->file, buf, len);
+            if (wrote < 0) {
+                return syscall_error((enum syscall_error)(-wrote));
+            }
+            return (uint64_t)wrote;
+        }
         return syscall_error(SYSCALL_EBADF);
     }
     case SYSCALL_OPEN: {
@@ -238,18 +272,20 @@ uint64_t syscall_handle(struct syscall_regs *regs, struct interrupt_frame *frame
             return syscall_error(SYSCALL_EINVAL);
         }
         if (streq(path_buf, "/dev/tty") || streq(path_buf, "/dev/console")) {
-            int fd = handle_alloc(HANDLE_TTY, NULL);
+            int fd = handle_alloc(HANDLE_TTY, NULL, sched_current_pid());
             if (fd < 0) {
                 return syscall_error(SYSCALL_ENOMEM);
             }
             return (uint64_t)fd;
         }
-        const struct memfs_file *file = memfs_lookup(path_buf);
-        if (!file) {
-            return syscall_error(SYSCALL_ENOENT);
+        struct vfs_file *file = NULL;
+        int vfs_err = vfs_open(path_buf, &file);
+        if (vfs_err != SYSCALL_OK) {
+            return syscall_error((enum syscall_error)vfs_err);
         }
-        int fd = handle_alloc(HANDLE_MEMFILE, file);
+        int fd = handle_alloc(HANDLE_VFS, file, sched_current_pid());
         if (fd < 0) {
+            vfs_close(file);
             return syscall_error(SYSCALL_ENOMEM);
         }
         return (uint64_t)fd;
@@ -259,8 +295,10 @@ uint64_t syscall_handle(struct syscall_regs *regs, struct interrupt_frame *frame
         if (!handle_valid(fd)) {
             return syscall_error(SYSCALL_EBADF);
         }
+        if (handles[fd].type == HANDLE_VFS) {
+            vfs_close(handles[fd].file);
+        }
         handles[fd].type = HANDLE_FREE;
-        handles[fd].offset = 0;
         handles[fd].file = NULL;
         return 0;
     }
@@ -276,11 +314,12 @@ uint64_t syscall_handle(struct syscall_regs *regs, struct interrupt_frame *frame
             kfree(launch);
             return syscall_error(SYSCALL_EINVAL);
         }
-        if (sched_create(user_launch_thread, launch) != 0) {
+        int pid = 0;
+        if (sched_create_user(user_launch_thread, launch, sched_current_pid(), &pid) != 0) {
             kfree(launch);
             return syscall_error(SYSCALL_ENOMEM);
         }
-        return 0;
+        return (uint64_t)pid;
     }
     case SYSCALL_EXEC: {
         const char *path = (const char *)regs->rdi;
@@ -298,6 +337,23 @@ uint64_t syscall_handle(struct syscall_regs *regs, struct interrupt_frame *frame
         sched_set_current_aspace(space.pml4_phys);
         user_enter(space.entry, user_sp, space.pml4_phys);
         __builtin_unreachable();
+    }
+    case SYSCALL_GETPID:
+        return (uint64_t)sched_current_pid();
+    case SYSCALL_WAIT: {
+        int *status = (int *)regs->rdi;
+        if (status && !user_ptr_range((uint64_t)status, sizeof(int))) {
+            return syscall_error(SYSCALL_EINVAL);
+        }
+        int code = 0;
+        int pid = sched_wait_child(sched_current_pid(), status ? &code : NULL);
+        if (pid < 0) {
+            return syscall_error(SYSCALL_ENOENT);
+        }
+        if (status) {
+            *status = code;
+        }
+        return (uint64_t)pid;
     }
     default:
         return syscall_error(SYSCALL_EINVAL);

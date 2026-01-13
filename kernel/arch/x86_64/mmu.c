@@ -13,6 +13,7 @@ extern uint64_t pml4_table[];
 #define PTE_RW 0x2ULL
 #define PTE_USER 0x4ULL
 #define PTE_PS 0x80ULL
+#define PTE_COW (1ULL << 9)
 
 #define PAGE_SIZE_2M (1ULL << 21)
 #define HHDM_PML4_INDEX ((HHDM_BASE >> 39) & 0x1FF)
@@ -205,6 +206,9 @@ void mmu_map_page(uint64_t virt, uint64_t phys, uint64_t flags)
     if (flags & MMU_FLAG_GLOBAL) {
         entry |= (1ULL << 8);
     }
+    if (flags & MMU_FLAG_COW) {
+        entry |= PTE_COW;
+    }
     if (flags & MMU_FLAG_NOEXEC) {
         entry |= (1ULL << 63);
     }
@@ -246,6 +250,9 @@ int mmu_map_page_in(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint64_t f
     }
     if (flags & MMU_FLAG_GLOBAL) {
         entry |= (1ULL << 8);
+    }
+    if (flags & MMU_FLAG_COW) {
+        entry |= PTE_COW;
     }
     if (flags & MMU_FLAG_NOEXEC) {
         entry |= (1ULL << 63);

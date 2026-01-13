@@ -32,6 +32,11 @@ cmake --build build
 ```
 This produces `build/kernel.elf` and the GRUB ISO `build/kernel.iso`.
 
+User programs can be rebuilt into `kernel/user_images.c` with:
+```sh
+scripts/build-user.sh
+```
+
 ## Run in QEMU
 ```sh
 cmake --build build --target iso
@@ -53,6 +58,10 @@ Console logs appear on VGA; duplicate logs are emitted to the serial port (shown
 - `kernel/kernel.c` – Higher-half entry, init sequence, allocator/timer self-tests.
 - `linker.ld` – Higher-half linker script with low bootstrap sections.
 - `grub/grub.cfg` – GRUB boot menu for the ISO.
+
+## TODO / Next Steps
+- Userland: minimal libc, basic utilities, init process, and toolchain for building apps.
+- Reliability/security: syscall hardening, fuzz/regression tests, crash recovery, and debug tooling.
 
 ## Notes
 - The PMM logs each managed region (start/end, usable pages) at boot to both console and serial.

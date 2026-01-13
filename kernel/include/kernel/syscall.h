@@ -13,6 +13,8 @@ enum {
     SYSCALL_CLOSE = 6,
     SYSCALL_SPAWN = 7,
     SYSCALL_EXEC = 8,
+    SYSCALL_GETPID = 9,
+    SYSCALL_WAIT = 10,
 };
 
 enum syscall_error {
@@ -44,3 +46,4 @@ struct syscall_regs {
 };
 
 uint64_t syscall_handle(struct syscall_regs *regs, struct interrupt_frame *frame);
+void syscall_cleanup_handles_for_pid(int pid);

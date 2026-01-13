@@ -32,6 +32,13 @@ set(KERNEL_SOURCES
     kernel/timer.c
     kernel/tty.c
     kernel/fs.c
+    kernel/ramfs.c
+    kernel/vfs.c
+    kernel/block.c
+    kernel/ata.c
+    kernel/pci.c
+    kernel/acpi.c
+    kernel/fat.c
     kernel/heap.c
     kernel/mem.c
     kernel/printf.c
@@ -50,6 +57,11 @@ target_include_directories(kernel PRIVATE ${CMAKE_SOURCE_DIR}/kernel/include)
 set_source_files_properties(
     kernel/arch/x86_64/idt.c
     PROPERTIES COMPILE_OPTIONS "-mno-sse;-mno-sse2;-mno-mmx;-mgeneral-regs-only"
+)
+set_source_files_properties(
+    kernel/pci.c
+    kernel/acpi.c
+    PROPERTIES COMPILE_OPTIONS "-mno-sse;-mno-sse2;-mno-mmx;-mno-80387;-mgeneral-regs-only"
 )
 
 target_compile_options(kernel PRIVATE

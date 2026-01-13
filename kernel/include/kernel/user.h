@@ -37,3 +37,4 @@ void user_smoke_thread(void *arg);
 void user_launch_thread(void *arg);
 void user_exit_trampoline(void) __attribute__((noreturn));
 void user_exit_handler(void) __attribute__((noreturn));
+void user_exit_with_code(int code) __attribute__((noreturn));

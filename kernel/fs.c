@@ -10,8 +10,14 @@ extern const uint8_t user_image_init[];
 extern const uint64_t user_image_init_len;
 extern const uint8_t user_image_echo[];
 extern const uint64_t user_image_echo_len;
+extern const uint8_t user_image_ls[];
+extern const uint64_t user_image_ls_len;
+extern const uint8_t user_image_cat[];
+extern const uint64_t user_image_cat_len;
+extern const uint8_t user_image_fuzz[];
+extern const uint64_t user_image_fuzz_len;
 
-static struct memfs_file memfs_files[4];
+static struct memfs_file memfs_files[7];
 static int memfs_ready = 0;
 
 static void memfs_init(void)
@@ -31,6 +37,15 @@ static void memfs_init(void)
     memfs_files[3].path = "/bin/echo";
     memfs_files[3].data = user_image_echo;
     memfs_files[3].size = user_image_echo_len;
+    memfs_files[4].path = "/bin/ls";
+    memfs_files[4].data = user_image_ls;
+    memfs_files[4].size = user_image_ls_len;
+    memfs_files[5].path = "/bin/cat";
+    memfs_files[5].data = user_image_cat;
+    memfs_files[5].size = user_image_cat_len;
+    memfs_files[6].path = "/bin/fuzz";
+    memfs_files[6].data = user_image_fuzz;
+    memfs_files[6].size = user_image_fuzz_len;
     memfs_ready = 1;
 }
 

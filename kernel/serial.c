@@ -22,6 +22,17 @@ static int tx_empty(void)
     return inb(COM1_PORT + 5) & 0x20;
 }
 
+static int serial_try_write_char(char c)
+{
+    for (uint32_t i = 0; i < 100000; ++i) {
+        if (tx_empty()) {
+            outb(COM1_PORT, (uint8_t)c);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 void serial_init(void)
 {
     outb(COM1_PORT + 1, 0x00);    /* disable interrupts */
@@ -36,19 +47,16 @@ void serial_init(void)
 
 void serial_write_char(char c)
 {
-    while (!tx_empty()) {
-        /* busy wait */
-    }
-    outb(COM1_PORT, (uint8_t)c);
+    (void)serial_try_write_char(c);
 }
 
 void serial_write(const char *msg)
 {
     for (size_t i = 0; msg[i] != '\0'; ++i) {
         if (msg[i] == '\n') {
-            serial_write_char('\r');
+            serial_try_write_char('\r');
         }
-        serial_write_char(msg[i]);
+        serial_try_write_char(msg[i]);
     }
 }
 
@@ -59,9 +67,9 @@ void serial_write_len(const char *msg, uint64_t len)
     }
     for (uint64_t i = 0; i < len; ++i) {
         if (msg[i] == '\n') {
-            serial_write_char('\r');
+            serial_try_write_char('\r');
         }
-        serial_write_char(msg[i]);
+        serial_try_write_char(msg[i]);
     }
 }
 

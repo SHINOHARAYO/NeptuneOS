@@ -24,6 +24,16 @@ static void write_str(const char *s)
     sys_write(1, s, strlen(s));
 }
 
+static void spawn_and_wait(const char *path, const char *const *argv, const char *const *envp)
+{
+    long pid = sys_spawn(path, argv, envp);
+    if (pid < 0) {
+        write_str("spawn: failed\n");
+        return;
+    }
+    (void)sys_wait(0);
+}
+
 static int tokenize(char *buf, char *out[], int max)
 {
     int count = 0;
@@ -197,10 +207,7 @@ static void cmd_spawn(char *args[], int argc, const char *const *envp)
         argv[i] = args[i];
     }
     argv[argc] = 0;
-    long pid = sys_spawn(path, argv, envp);
-    if (pid < 0) {
-        write_str("spawn: failed\n");
-    }
+    spawn_and_wait(path, argv, envp);
 }
 
 void _start(void)
@@ -239,7 +246,7 @@ void _start(void)
         }
         if (strcmp(args[0], "hello") == 0) {
             static const char *argv[] = { "/bin/hello", 0 };
-            sys_spawn("/bin/hello", argv, envp);
+            spawn_and_wait("/bin/hello", argv, envp);
             continue;
         }
         if (strcmp(args[0], "exec") == 0) {

@@ -1,6 +1,8 @@
 #include "kernel/terminal.h"
 #include "kernel/console.h"
 #include "kernel/irq.h"
+#include "kernel/heap.h"
+#include "kernel/log.h"
 #include "kernel/pci.h"
 #include "kernel/sched.h"
 #include "kernel/timer.h"
@@ -73,7 +75,7 @@ static void terminal_execute(const char *line)
         return;
     }
     if (streq(line, "help")) {
-        console_write("Commands: help, clear, ticks, lspci, acpi\n");
+        console_write("Commands: help, clear, ticks, lspci, acpi, heap, logdebug, loginfo, logwarn, logerror\n");
         terminal_prompt();
         return;
     }
@@ -96,6 +98,35 @@ static void terminal_execute(const char *line)
     }
     if (streq(line, "acpi")) {
         acpi_dump();
+        terminal_prompt();
+        return;
+    }
+    if (streq(line, "heap")) {
+        kheap_dump_stats();
+        terminal_prompt();
+        return;
+    }
+    if (streq(line, "logdebug")) {
+        log_set_level(LOG_LEVEL_DEBUG);
+        console_write("Log level set to debug\n");
+        terminal_prompt();
+        return;
+    }
+    if (streq(line, "loginfo")) {
+        log_set_level(LOG_LEVEL_INFO);
+        console_write("Log level set to info\n");
+        terminal_prompt();
+        return;
+    }
+    if (streq(line, "logwarn")) {
+        log_set_level(LOG_LEVEL_WARN);
+        console_write("Log level set to warn\n");
+        terminal_prompt();
+        return;
+    }
+    if (streq(line, "logerror")) {
+        log_set_level(LOG_LEVEL_ERROR);
+        console_write("Log level set to error\n");
         terminal_prompt();
         return;
     }

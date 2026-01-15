@@ -91,18 +91,9 @@ static int push_string(struct user_space *space, uint64_t *sp, const char *s, ui
 
 __attribute__((noreturn)) static void user_exit_common(int code)
 {
-    log_info("User-mode exited to kernel");
     sched_set_current_exit_code(code);
     syscall_cleanup_handles_for_pid(sched_current_pid());
     mmu_reload_cr3();
-    static int terminal_started = 0;
-    if (!terminal_started && sched_current_exit_to_kernel()) {
-        sched_kill_user_threads();
-        terminal_started = 1;
-        if (sched_create(terminal_thread, NULL) != 0) {
-            log_error("Failed to start kernel terminal");
-        }
-    }
     sched_exit_current();
 }
 

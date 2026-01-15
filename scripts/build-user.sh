@@ -25,7 +25,7 @@ COMMON_FLAGS=(
   -O2
 )
 
-programs=(hello shell init echo)
+programs=(hello shell init echo ls cat fuzz)
 
 for prog in "${programs[@]}"; do
   gcc "${COMMON_FLAGS[@]}" \
@@ -42,7 +42,7 @@ import os
 
 root = Path(os.environ["ROOT_PATH"]).resolve()
 build = root / "build-user"
-inc_files = ["hello", "shell", "init", "echo"]
+inc_files = ["hello", "shell", "init", "echo", "ls", "cat", "fuzz"]
 
 out = ["#include <stdint.h>\n\n"]
 

@@ -1,6 +1,8 @@
 #include <stdint.h>
 #include "libc.h"
 
+#define READ_CHUNK 64
+
 static void write_str(const char *s)
 {
     sys_write(1, s, strlen(s));
@@ -11,13 +13,26 @@ __attribute__((used)) static void start_main(uint64_t *sp)
     uint64_t argc = sp[0];
     const char **argv = (const char **)&sp[1];
 
-    for (uint64_t i = 1; i < argc; ++i) {
-        if (i > 1) {
-            sys_write(1, " ", 1);
-        }
-        write_str(argv[i]);
+    if (argc < 2 || !argv[1] || argv[1][0] == '\0') {
+        write_str("cat: missing path\n");
+        sys_exit(1);
     }
-    sys_write(1, "\n", 1);
+
+    long fd = sys_open(argv[1]);
+    if (fd < 0) {
+        write_str("cat: open failed\n");
+        sys_exit(1);
+    }
+
+    char buf[READ_CHUNK];
+    for (;;) {
+        long n = sys_read(fd, buf, READ_CHUNK);
+        if (n <= 0) {
+            break;
+        }
+        sys_write(1, buf, n);
+    }
+    sys_close(fd);
     sys_exit(0);
 }
 

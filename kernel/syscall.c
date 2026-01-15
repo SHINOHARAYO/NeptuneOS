@@ -1,6 +1,7 @@
 #include "kernel/syscall.h"
 #include "kernel/heap.h"
 #include "kernel/log.h"
+#include "kernel/mmu.h"
 #include "kernel/sched.h"
 #include "kernel/tty.h"
 #include "kernel/user.h"
@@ -102,8 +103,47 @@ static int streq(const char *a, const char *b)
     return *a == *b;
 }
 
+#define PTE_PRESENT 0x1ULL
+#define PTE_USER 0x4ULL
+#define PTE_PS 0x80ULL
+
+static int user_page_present(uint64_t pml4_phys, uint64_t virt)
+{
+    if (!pml4_phys) {
+        return 0;
+    }
+    uint64_t *pml4 = (uint64_t *)phys_to_hhdm(pml4_phys);
+    uint64_t pml4e = pml4[(virt >> 39) & 0x1FF];
+    if (!(pml4e & PTE_PRESENT) || !(pml4e & PTE_USER)) {
+        return 0;
+    }
+
+    uint64_t *pdpt = (uint64_t *)phys_to_hhdm(pml4e & ~0xFFFULL);
+    uint64_t pdpte = pdpt[(virt >> 30) & 0x1FF];
+    if (!(pdpte & PTE_PRESENT) || !(pdpte & PTE_USER)) {
+        return 0;
+    }
+    if (pdpte & PTE_PS) {
+        return 1;
+    }
+
+    uint64_t *pd = (uint64_t *)phys_to_hhdm(pdpte & ~0xFFFULL);
+    uint64_t pde = pd[(virt >> 21) & 0x1FF];
+    if (!(pde & PTE_PRESENT) || !(pde & PTE_USER)) {
+        return 0;
+    }
+    if (pde & PTE_PS) {
+        return 1;
+    }
+
+    uint64_t *pt = (uint64_t *)phys_to_hhdm(pde & ~0xFFFULL);
+    uint64_t pte = pt[(virt >> 12) & 0x1FF];
+    return (pte & PTE_PRESENT) && (pte & PTE_USER);
+}
+
 static int user_ptr_range(uint64_t ptr, uint64_t len)
 {
+    const uint64_t pml4_phys = sched_current_aspace();
     if (len == 0) {
         return 0;
     }
@@ -113,7 +153,23 @@ static int user_ptr_range(uint64_t ptr, uint64_t len)
     if (ptr + len < ptr) {
         return 0;
     }
-    return (ptr + len) <= USER_STACK_TOP;
+    if ((ptr + len) > USER_STACK_TOP) {
+        return 0;
+    }
+
+    uint64_t end = ptr + len;
+    uint64_t addr = ptr;
+    while (addr < end) {
+        if (!user_page_present(pml4_phys, addr)) {
+            return 0;
+        }
+        uint64_t next = (addr & ~0xFFFULL) + 0x1000;
+        if (next <= addr) {
+            return 0;
+        }
+        addr = next;
+    }
+    return 1;
 }
 
 static int user_str_copy(const char *user, char *dst, uint64_t dst_len)

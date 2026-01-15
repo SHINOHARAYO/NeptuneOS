@@ -25,7 +25,7 @@
 #define ENABLE_TEXT_WP_TEST 1
 #define ENABLE_SECTION_PROTECT 1
 #define ENABLE_USER_SMOKE 1
-#define ENABLE_KERNEL_TERMINAL 0
+#define ENABLE_KERNEL_TERMINAL 1
 
 extern uint64_t pml4_table[];
 

@@ -146,6 +146,7 @@ int sched_create(void (*entry)(void *), void *arg)
     thread->stack = (uint8_t *)kalloc_zero(STACK_SIZE, 16);
     if (!thread->stack) {
         log_error("sched_create: stack alloc failed");
+        *thread = (struct thread){0};
         return -1;
     }
 
@@ -185,6 +186,7 @@ int sched_create_user(void (*entry)(void *), void *arg, int parent_pid, int *out
     thread->stack = (uint8_t *)kalloc_zero(STACK_SIZE, 16);
     if (!thread->stack) {
         log_error("sched_create_user: stack alloc failed");
+        *thread = (struct thread){0};
         return -1;
     }
 

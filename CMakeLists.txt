@@ -103,6 +103,12 @@ add_custom_target(run
 )
 
 add_custom_target(run-4g
+    COMMAND qemu-system-x86_64 -cdrom ${ISO_IMAGE} -display none -serial stdio -m 4G -no-reboot -no-shutdown
+    DEPENDS iso
+    USES_TERMINAL
+)
+
+add_custom_target(run-4g-vga
     COMMAND qemu-system-x86_64 -cdrom ${ISO_IMAGE} -serial stdio -m 4G -no-reboot -no-shutdown
     DEPENDS iso
     USES_TERMINAL
@@ -112,6 +118,18 @@ add_custom_target(run-headless
     COMMAND ${CMAKE_COMMAND} -E rm -f ${QEMU_SERIAL_LOG}
     COMMAND ${CMAKE_COMMAND} -E echo "Serial log: ${QEMU_SERIAL_LOG}"
     COMMAND qemu-system-x86_64 -cdrom ${ISO_IMAGE} -display none -serial file:${QEMU_SERIAL_LOG} -no-reboot -no-shutdown
+    DEPENDS iso
+    USES_TERMINAL
+)
+
+add_custom_target(regression
+    COMMAND ${CMAKE_COMMAND} -E env BUILD_DIR=${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/scripts/regression.sh
+    DEPENDS iso
+    USES_TERMINAL
+)
+
+add_custom_target(fuzz
+    COMMAND ${CMAKE_COMMAND} -E env BUILD_DIR=${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/scripts/fuzz.sh
     DEPENDS iso
     USES_TERMINAL
 )

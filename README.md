@@ -46,6 +46,14 @@ Headless run (serial log saved to `build/qemu-serial.log`):
 ```sh
 cmake --build build --target run-headless
 ```
+Regression smoke (headless boot checks):
+```sh
+cmake --build build --target regression
+```
+Fuzz smoke (headless user-mode syscall fuzz):
+```sh
+cmake --build build --target fuzz
+```
 Console logs appear on VGA; duplicate logs are emitted to the serial port (shown in `-serial stdio`).
 
 ## Layout
@@ -60,10 +68,9 @@ Console logs appear on VGA; duplicate logs are emitted to the serial port (shown
 - `grub/grub.cfg` – GRUB boot menu for the ISO.
 
 ## TODO / Next Steps
-- Userland: minimal libc, basic utilities, init process, and toolchain for building apps.
-- Reliability/security: syscall hardening, fuzz/regression tests, crash recovery, and debug tooling.
+No.
 
 ## Notes
 - The PMM logs each managed region (start/end, usable pages) at boot to both console and serial.
 - After initialization, the identity map is dropped; only higher-half mappings remain. Avoid using low virtual addresses after that point.
-- Panic paths halt the CPU and emit messages to both VGA and serial for debugging.
+- Panic paths emit messages to both VGA and serial, then attempt a reboot.

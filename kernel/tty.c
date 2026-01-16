@@ -121,7 +121,8 @@ uint64_t tty_read(char *buf, uint64_t len)
             }
             continue;
         }
-        sched_yield();
+        /* No input from either source, wait for interrupt */
+        irq_wait_input();
     }
     return count;
 }

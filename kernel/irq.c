@@ -14,12 +14,27 @@ static uint32_t kb_head = 0, kb_tail = 0;
 static uint8_t com_buf[COM_BUF_SIZE];
 static uint32_t com_head = 0, com_tail = 0;
 
+#include "kernel/sched.h"
+
+static wait_queue_t input_wq;
+static int wq_init_done = 0;
+
+static void ensure_wq_init(void)
+{
+    if (!wq_init_done) {
+        wait_queue_init(&input_wq);
+        wq_init_done = 1;
+    }
+}
+
 static void kb_push(uint8_t sc)
 {
     uint32_t next = (kb_head + 1) % KB_BUF_SIZE;
     if (next != kb_tail) {
         kb_buf[kb_head] = sc;
         kb_head = next;
+        ensure_wq_init();
+        sched_wake_one(&input_wq);
     }
 }
 
@@ -29,6 +44,8 @@ static void com_push(uint8_t ch)
     if (next != com_tail) {
         com_buf[com_head] = ch;
         com_head = next;
+        ensure_wq_init();
+        sched_wake_one(&input_wq);
     }
 }
 
@@ -38,7 +55,6 @@ void irq_dispatch(uint8_t irq)
     case IRQ_KEYBOARD: {
         uint8_t sc = inb(KB_DATA_PORT);
         kb_push(sc);
-        log_debug_hex("KB scancode", sc);
         break;
     }
     case IRQ_SERIAL_COM1: {
@@ -47,7 +63,6 @@ void irq_dispatch(uint8_t irq)
         if (lsr & 0x01) {
             uint8_t ch = inb(COM1_PORT);
             com_push(ch);
-            log_debug_hex("COM1 RX", ch);
         } else {
             /* read IIR to clear pending */
             (void)inb(COM1_PORT + 2);
@@ -83,4 +98,17 @@ int irq_com_pop(uint8_t *ch)
     *ch = com_buf[com_tail];
     com_tail = (com_tail + 1) % COM_BUF_SIZE;
     return 1;
+}
+
+static int irq_has_input(void)
+{
+    if (kb_head != kb_tail) return 1;
+    if (com_head != com_tail) return 1;
+    return 0;
+}
+
+void irq_wait_input(void)
+{
+    ensure_wq_init();
+    sched_sleep_cond(&input_wq, irq_has_input);
 }

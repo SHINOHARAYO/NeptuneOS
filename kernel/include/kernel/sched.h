@@ -33,6 +33,19 @@ void sched_kill_user_threads(void);
 uint64_t sched_current_aspace(void);
 int sched_current_pid(void);
 void sched_set_current_exit_code(int code);
+
+/* Wait queue support */
+struct thread;
+typedef struct wait_queue {
+    struct thread *head;
+    struct thread *tail;
+} wait_queue_t;
+
+void wait_queue_init(wait_queue_t *wq);
+void sched_sleep(wait_queue_t *wq);
+void sched_sleep_cond(wait_queue_t *wq, int (*cond)(void));
+void sched_wake_one(wait_queue_t *wq);
+void sched_wake_all(wait_queue_t *wq);
 int sched_wait_child(int parent_pid, int *out_code);
 
 void context_switch(struct context *old_ctx, struct context *new_ctx);

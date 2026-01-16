@@ -25,7 +25,7 @@
 #define ENABLE_TEXT_WP_TEST 1
 #define ENABLE_SECTION_PROTECT 1
 #define ENABLE_USER_SMOKE 1
-#define ENABLE_KERNEL_TERMINAL 1
+#define ENABLE_KERNEL_TERMINAL 0
 
 extern uint64_t pml4_table[];
 
@@ -101,19 +101,6 @@ static void idle_thread(void *arg)
     }
 }
 
-static void worker_thread(void *arg)
-{
-    uint64_t id = (uint64_t)arg;
-    uint64_t last = 0;
-    for (;;) {
-        uint64_t now = timer_get_ticks();
-        if (now - last >= 100) {
-            log_debug_hex("Worker tick", id);
-            last = now;
-        }
-        sched_maybe_preempt();
-    }
-}
 
 void kernel_main(uint32_t magic, uint32_t multiboot_info)
 {
@@ -299,24 +286,23 @@ wp_resume:
 
     log_info("Starting scheduler...");
     sched_init();
-    if (sched_create(worker_thread, (void *)1) != 0) {
-        log_error("Failed to create worker thread 1");
-    }
-    if (sched_create(worker_thread, (void *)2) != 0) {
-        log_error("Failed to create worker thread 2");
-    }
+    /* Create user process */
+    // sched_create_user(init_process, NULL, 0, NULL);
+    
+    // log_info("Kernel moved to idle loop.");
+    sched_create(idle_thread, NULL);
+    
 #if ENABLE_KERNEL_TERMINAL
     if (sched_create(terminal_thread, NULL) != 0) {
         log_error("Failed to create terminal thread");
     }
 #endif
+
 #if ENABLE_USER_SMOKE
     if (sched_create_user(user_smoke_thread, NULL, 0, NULL) != 0) {
         log_error("Failed to create user smoke thread");
     }
 #endif
-    if (sched_create(idle_thread, NULL) != 0) {
-        log_error("Failed to create idle thread");
-    }
+
     sched_start();
 }

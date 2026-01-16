@@ -9,3 +9,4 @@ void irq_dispatch(uint8_t irq);
 
 int irq_kb_pop(uint8_t *scancode);
 int irq_com_pop(uint8_t *ch);
+void irq_wait_input(void);

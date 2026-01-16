@@ -29,6 +29,7 @@ set(KERNEL_SOURCES
     kernel/panic.c
     kernel/serial.c
     kernel/log.c
+    kernel/spinlock.c
     kernel/timer.c
     kernel/tty.c
     kernel/fs.c

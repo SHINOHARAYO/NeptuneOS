@@ -4,6 +4,7 @@
 #include "kernel/panic.h"
 #include "kernel/serial.h"
 #include "kernel/mmu.h"
+#include "kernel/spinlock.h"
 
 #include <stdint.h>
 #include <stddef.h>
@@ -51,6 +52,7 @@ static uint64_t managed_pages = 0;      /* allocatable pages (excludes metadata)
 static uint64_t reserved_pages = 0;     /* pages consumed by allocator metadata */
 static uint64_t used_pages = 0;         /* includes reserved + allocations */
 static uint64_t max_phys_end = 0;       /* highest address of any managed region */
+static spinlock_t pmm_lock;
 
 static uint64_t align_up(uint64_t value, uint64_t align)
 {
@@ -315,43 +317,92 @@ void mem_init(uint64_t multiboot_info)
     log_info("Physical memory allocator ready.");
 }
 
+static uint32_t pmm_cursor_region = 0;
+static uint64_t pmm_cursor_page_idx = 0;
+
 uint64_t pmm_alloc_page(void)
 {
-    for (uint32_t r = 0; r < region_count; ++r) {
+    spinlock_acquire_irqsave(&pmm_lock);
+    
+    uint32_t start_r = pmm_cursor_region;
+    uint64_t start_p = pmm_cursor_page_idx;
+    
+    for (uint32_t i = 0; i < region_count; ++i) {
+        uint32_t r = (start_r + i) % region_count;
         struct pmm_region *region = &regions[r];
+        
         if (region->total_pages <= region->reserved_pages) {
             continue;
         }
-        for (uint64_t i = region->reserved_pages; i < region->total_pages; ++i) {
-            if (!test_bit(region, i)) {
-                set_bit(region, i);
+
+        /* Determine start page for this region */
+        uint64_t p_current = (r == start_r) ? start_p : region->reserved_pages;
+        
+        /* Sanity check */
+        if (p_current >= region->total_pages || p_current < region->reserved_pages) {
+            p_current = region->reserved_pages;
+        }
+
+        /* Forward search from current position */
+        for (uint64_t page = p_current; page < region->total_pages; ++page) {
+            if (!test_bit(region, page)) {
+                set_bit(region, page);
                 ++used_pages;
-                return region->phys_start + (i * 4096);
+                
+                pmm_cursor_region = r;
+                pmm_cursor_page_idx = page + 1;
+                
+                spinlock_release_irqrestore(&pmm_lock);
+                return region->phys_start + (page * 4096);
             }
         }
+        
+        /* Wrap around: if we started in the middle, search the beginning */
+        if (r == start_r && p_current > region->reserved_pages) {
+             for (uint64_t page = region->reserved_pages; page < p_current; ++page) {
+                if (!test_bit(region, page)) {
+                    set_bit(region, page);
+                    ++used_pages;
+                    
+                    pmm_cursor_region = r;
+                    pmm_cursor_page_idx = page + 1;
+                    
+                    spinlock_release_irqrestore(&pmm_lock);
+                    return region->phys_start + (page * 4096);
+                }
+             }
+        }
     }
+    
+    spinlock_release_irqrestore(&pmm_lock);
     panic("Out of physical memory", 0);
 }
 
 void pmm_free_page(uint64_t addr)
 {
+    spinlock_acquire_irqsave(&pmm_lock);
     struct pmm_region *region = find_region(addr);
     if (!region) {
+        spinlock_release_irqrestore(&pmm_lock);
         panic("Attempt to free non-managed page", addr);
     }
 
     uint64_t idx = (addr - region->phys_start) / 4096;
     if (idx >= region->total_pages) {
+        spinlock_release_irqrestore(&pmm_lock);
         panic("Attempt to free outside region bounds", addr);
     }
     if (idx < region->reserved_pages) {
+        spinlock_release_irqrestore(&pmm_lock);
         panic("Attempt to free allocator metadata page", addr);
     }
     if (!test_bit(region, idx)) {
+        spinlock_release_irqrestore(&pmm_lock);
         panic("Double free detected", addr);
     }
     clear_bit(region, idx);
     --used_pages;
+    spinlock_release_irqrestore(&pmm_lock);
 }
 
 uint64_t pmm_total_bytes(void)

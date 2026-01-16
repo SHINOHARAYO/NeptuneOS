@@ -1,6 +1,7 @@
 #include "kernel/heap.h"
 #include "kernel/mem.h"
 #include "kernel/mmu.h"
+#include "kernel/spinlock.h"
 #include "kernel/log.h"
 
 #include <stdint.h>
@@ -37,6 +38,7 @@ static uint64_t slab_allocs[KHEAP_MAX_SLAB_CLASSES] = {0};
 static uint64_t slab_reuses[KHEAP_MAX_SLAB_CLASSES] = {0};
 static uint64_t large_allocs = 0;
 static uint64_t large_reuses = 0;
+static spinlock_t heap_lock;
 
 static void map_next_page(void)
 {
@@ -201,10 +203,12 @@ static void track_free_bytes(uint64_t *free_slab_bytes, uint64_t *free_large_byt
 
 void *kalloc(size_t size, size_t align)
 {
+    spinlock_acquire_irqsave(&heap_lock);
     if (align == 0) {
         align = 8;
     }
     if (size == 0) {
+        spinlock_release_irqrestore(&heap_lock);
         return NULL;
     }
 
@@ -235,6 +239,7 @@ void *kalloc(size_t size, size_t align)
                 hdr->align = req_align;
                 ++total_allocs;
                 ++large_reuses;
+                spinlock_release_irqrestore(&heap_lock);
                 return (void *)(aligned_start + HEAP_PAYLOAD_OFFSET);
             }
         }
@@ -249,6 +254,7 @@ void *kalloc(size_t size, size_t align)
             free_lists[slab_idx] = node->next;
             ++total_allocs;
             ++slab_reuses[slab_idx];
+            spinlock_release_irqrestore(&heap_lock);
             return (void *)((uint8_t *)node + HEAP_PAYLOAD_OFFSET);
         }
 
@@ -263,6 +269,7 @@ void *kalloc(size_t size, size_t align)
         hdr->align = req_align;
         ++total_allocs;
         ++slab_allocs[slab_idx];
+        spinlock_release_irqrestore(&heap_lock);
         return (void *)(block + HEAP_PAYLOAD_OFFSET);
     }
 
@@ -277,6 +284,7 @@ void *kalloc(size_t size, size_t align)
     heap_cur += total_need;
     ++total_allocs;
     ++large_allocs;
+    spinlock_release_irqrestore(&heap_lock);
     return ptr;
 }
 
@@ -294,7 +302,9 @@ void *kalloc_zero(size_t size, size_t align)
 
 void kfree(void *ptr)
 {
+    spinlock_acquire_irqsave(&heap_lock);
     if (!ptr || !frees_enabled) {
+        spinlock_release_irqrestore(&heap_lock);
         return;
     }
     uint8_t *block = (uint8_t *)ptr - HEAP_PAYLOAD_OFFSET;
@@ -306,23 +316,28 @@ void kfree(void *ptr)
         node->align = hdr->align;
         if (!is_canonical((uint64_t)node)) {
             log_error("kfree large: non-canonical");
+            spinlock_release_irqrestore(&heap_lock);
             return;
         }
         insert_large_node(node);
         ++total_frees;
+        spinlock_release_irqrestore(&heap_lock);
         return;
     }
     if (idx >= slab_count) {
+        spinlock_release_irqrestore(&heap_lock);
         return; /* unknown class */
     }
     struct free_node *node = (struct free_node *)block;
     if (!is_canonical((uint64_t)node)) {
         log_error("kfree slab: non-canonical");
+        spinlock_release_irqrestore(&heap_lock);
         return;
     }
     node->next = free_lists[idx];
     free_lists[idx] = node;
     ++total_frees;
+    spinlock_release_irqrestore(&heap_lock);
 }
 
 void kalloc_enable_frees(void)

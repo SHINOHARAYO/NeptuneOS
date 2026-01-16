@@ -1,9 +1,12 @@
 #include "kernel/serial.h"
+#include "kernel/spinlock.h"
 
 #include <stdint.h>
 #include <stddef.h>
 
 #define COM1_PORT 0x3F8
+
+static spinlock_t serial_lock;
 
 static inline void outb(uint16_t port, uint8_t value)
 {
@@ -22,7 +25,7 @@ static int tx_empty(void)
     return inb(COM1_PORT + 5) & 0x20;
 }
 
-static int serial_try_write_char(char c)
+static int serial_write_char_unlocked(char c)
 {
     for (uint32_t i = 0; i < 100000; ++i) {
         if (tx_empty()) {
@@ -47,17 +50,21 @@ void serial_init(void)
 
 void serial_write_char(char c)
 {
-    (void)serial_try_write_char(c);
+    spinlock_acquire_irqsave(&serial_lock);
+    (void)serial_write_char_unlocked(c);
+    spinlock_release_irqrestore(&serial_lock);
 }
 
 void serial_write(const char *msg)
 {
+    spinlock_acquire_irqsave(&serial_lock);
     for (size_t i = 0; msg[i] != '\0'; ++i) {
         if (msg[i] == '\n') {
-            serial_try_write_char('\r');
+            serial_write_char_unlocked('\r');
         }
-        serial_try_write_char(msg[i]);
+        serial_write_char_unlocked(msg[i]);
     }
+    spinlock_release_irqrestore(&serial_lock);
 }
 
 void serial_write_len(const char *msg, uint64_t len)
@@ -65,12 +72,14 @@ void serial_write_len(const char *msg, uint64_t len)
     if (!msg || len == 0) {
         return;
     }
+    spinlock_acquire_irqsave(&serial_lock);
     for (uint64_t i = 0; i < len; ++i) {
         if (msg[i] == '\n') {
-            serial_try_write_char('\r');
+            serial_write_char_unlocked('\r');
         }
-        serial_try_write_char(msg[i]);
+        serial_write_char_unlocked(msg[i]);
     }
+    spinlock_release_irqrestore(&serial_lock);
 }
 
 static char hex_digit(uint8_t value)
@@ -80,9 +89,12 @@ static char hex_digit(uint8_t value)
 
 void serial_write_hex(uint64_t value)
 {
-    serial_write("0x");
+    spinlock_acquire_irqsave(&serial_lock);
+    serial_write_char_unlocked('0');
+    serial_write_char_unlocked('x');
     for (int shift = 60; shift >= 0; shift -= 4) {
         uint8_t nibble = (value >> shift) & 0xF;
-        serial_write_char(hex_digit(nibble));
+        serial_write_char_unlocked(hex_digit(nibble));
     }
+    spinlock_release_irqrestore(&serial_lock);
 }

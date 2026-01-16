@@ -1,5 +1,6 @@
 build-x86/
 build-user/
 build-arm/
+build/
 .vscode/
 .gitignore

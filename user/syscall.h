@@ -19,7 +19,7 @@ static inline long syscall3(long num, long a1, long a2, long a3)
 {
     long ret;
     __asm__ volatile(
-        "int $0x80"
+        "syscall"
         : "=a"(ret)
         : "a"(num), "D"(a1), "S"(a2), "d"(a3)
         : "rcx", "r11", "memory");

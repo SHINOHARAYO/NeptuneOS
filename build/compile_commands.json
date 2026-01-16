@@ -1,0 +1,236 @@
+[
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/sched.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/sched.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/sched.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/sched.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/irq.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/irq.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/irq.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/irq.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/panic.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/panic.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/panic.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/panic.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/log.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/log.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/log.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/log.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/spinlock.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/spinlock.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/spinlock.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/spinlock.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/timer.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/timer.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/timer.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/timer.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/tty.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/tty.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/tty.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/tty.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/fs.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/fs.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/fs.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/fs.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/ramfs.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/ramfs.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/ramfs.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/ramfs.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/vfs.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/vfs.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/vfs.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/vfs.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/block.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/block.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/block.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/block.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/fat.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/fat.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/fat.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/fat.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/heap.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/heap.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/heap.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/heap.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/mem.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/mem.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/mem.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/mem.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/printf.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/printf.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/printf.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/printf.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/terminal.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/terminal.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/terminal.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/terminal.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/user.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/user.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/user.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/user.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/user_images.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/user_images.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/user_images.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/user_images.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/syscall.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/syscall.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/syscall.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/syscall.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/elf.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/elf.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/elf.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/elf.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/kernel.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/kernel.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/kernel.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/kernel.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/boot/boot.s.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/boot/boot.s",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/boot/boot.s",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/boot/boot.s.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/gdt.s.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/gdt.s",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/gdt.s",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/gdt.s.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/switch.s.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/switch.s",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/switch.s",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/switch.s.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/syscall_stub.s.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/syscall_stub.s",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/syscall_stub.s",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/syscall_stub.s.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/preempt_stub.s.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/preempt_stub.s",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/preempt_stub.s",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/preempt_stub.s.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/gdt.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/gdt.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/gdt.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/gdt.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/mmu.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/mmu.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/mmu.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/mmu.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/paging.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/paging.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/paging.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/paging.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -mno-sse -mno-sse2 -mno-mmx -mgeneral-regs-only -o CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/idt.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/idt.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/idt.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/idt.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/pic.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/pic.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/pic.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/pic.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/syscall_msr.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/syscall_msr.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/syscall_msr.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/syscall_msr.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/pit.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/pit.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/pit.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/pit.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/sched.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/sched.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/sched.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/sched.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/serial.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/serial.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/serial.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/arch/x86_64/serial.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/console.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/console.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/console.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/console.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -mno-sse -mno-sse2 -mno-mmx -mno-80387 -mgeneral-regs-only -o CMakeFiles/kernel-x86_64.dir/kernel/pci.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/pci.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/pci.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/pci.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -mno-sse -mno-sse2 -mno-mmx -mno-80387 -mgeneral-regs-only -o CMakeFiles/kernel-x86_64.dir/kernel/acpi.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/acpi.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/acpi.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/acpi.c.o"
+},
+{
+  "directory": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/build",
+  "command": "/usr/bin/gcc -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/include -I/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/arch/x86_64/include -g -std=gnu11 -ffreestanding -fno-stack-protector -fno-pic -m64 -mno-red-zone -mcmodel=kernel -Wall -Wextra -Wpedantic -o CMakeFiles/kernel-x86_64.dir/kernel/ata.c.o -c /home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/ata.c",
+  "file": "/home/zli/Documents/Coding/OSBranch/NeptuneOS/kernel/ata.c",
+  "output": "CMakeFiles/kernel-x86_64.dir/kernel/ata.c.o"
+}
+]

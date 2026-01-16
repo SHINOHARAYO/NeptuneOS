@@ -2,10 +2,11 @@
 #define NEPTUNE_SPINLOCK_H
 
 #include <stdint.h>
+#include <arch/processor.h>
 
 typedef struct {
     volatile uint32_t lock;
-    uint32_t flags; // for interrupt saving
+    arch_flags_t flags; // for interrupt saving
 } spinlock_t;
 
 void spinlock_init(spinlock_t *lock);

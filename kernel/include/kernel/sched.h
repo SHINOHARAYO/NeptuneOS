@@ -2,17 +2,7 @@
 
 #include <stdint.h>
 
-struct context {
-    uint64_t r15;
-    uint64_t r14;
-    uint64_t r13;
-    uint64_t r12;
-    uint64_t rbx;
-    uint64_t rbp;
-    uint64_t rsp;
-    uint64_t rip;
-    uint64_t rflags;
-};
+#include <arch/context.h>
 
 struct interrupt_frame;
 
@@ -35,7 +25,31 @@ int sched_current_pid(void);
 void sched_set_current_exit_code(int code);
 
 /* Wait queue support */
-struct thread;
+enum thread_state {
+    THREAD_UNUSED = 0,
+    THREAD_RUNNABLE,
+    THREAD_RUNNING,
+    THREAD_BLOCKED,
+    THREAD_DEAD,
+};
+
+struct thread {
+    struct thread *next;
+    struct thread *prev;
+    struct thread *wait_next;
+    struct context ctx;
+    void (*entry)(void *);
+    void *arg;
+    uint8_t *stack;
+    enum thread_state state;
+    uint64_t aspace;
+    uint8_t exit_to_kernel;
+    int pid;
+    int ppid;
+    int exit_code;
+    uint8_t is_user;
+    uint8_t reaped;
+};
 typedef struct wait_queue {
     struct thread *head;
     struct thread *tail;
@@ -49,3 +63,8 @@ void sched_wake_all(wait_queue_t *wq);
 int sched_wait_child(int parent_pid, int *out_code);
 
 void context_switch(struct context *old_ctx, struct context *new_ctx);
+void arch_thread_setup(struct thread *thread, void (*trampoline)(void));
+void arch_thread_switch(struct thread *next);
+void arch_enter_user(uint64_t entry, uint64_t stack, uint64_t pml4_phys);
+
+#define STACK_SIZE 16384

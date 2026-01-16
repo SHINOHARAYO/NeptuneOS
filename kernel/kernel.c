@@ -16,13 +16,20 @@
 #include "kernel/sched.h"
 #include "kernel/terminal.h"
 #include "kernel/user.h"
+#include <arch/processor.h>
 
 #define VGA_PHYS 0xB8000ULL
 #define VGA_HIGHER_HALF (HIGHER_HALF_BASE + VGA_PHYS)
 #define MULTIBOOT2_MAGIC 0x36D76289U
 
+#ifdef __x86_64__
 #define ENABLE_NX_TEST 1
 #define ENABLE_TEXT_WP_TEST 1
+#else
+#define ENABLE_NX_TEST 0
+#define ENABLE_TEXT_WP_TEST 0
+#endif
+
 #define ENABLE_SECTION_PROTECT 1
 #define ENABLE_USER_SMOKE 1
 #define ENABLE_KERNEL_TERMINAL 0
@@ -33,18 +40,26 @@ extern uint64_t pml4_table[];
 
 static inline void drop_identity_map(void)
 {
+#ifdef __x86_64__
     uint64_t phys_pml4 = (uint64_t)pml4_table;
     uint64_t *pml4_high = (uint64_t *)phys_to_higher_half(phys_pml4);
     pml4_high[0] = 0;
     __asm__ volatile("mov %0, %%cr3" : : "r"(phys_pml4) : "memory");
+#else
+    /* TODO: ARM64 identity map drop */
+#endif
 }
 
 static inline void enable_write_protect(void)
 {
+#ifdef __x86_64__
     uint64_t cr0;
     __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
     cr0 |= (1ULL << 16);
     __asm__ volatile("mov %0, %%cr0" : : "r"(cr0) : "memory");
+#else
+    /* ARM64 has WP by default in SCTLR_EL1 usually? Or assumed set by start.s */
+#endif
 }
 
 static void trigger_page_fault_test(void)
@@ -96,7 +111,7 @@ static void idle_thread(void *arg)
 {
     (void)arg;
     for (;;) {
-        __asm__ volatile("hlt");
+        arch_halt();
         sched_maybe_preempt();
     }
 }
@@ -146,6 +161,7 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
     log_info("Applying kernel section protections...");
     mmu_protect_kernel_sections();
     log_info("Kernel sections protected.");
+
     enable_write_protect();
     log_info("Write-protect enabled.");
     #else
@@ -204,12 +220,18 @@ void kernel_main(uint32_t magic, uint32_t multiboot_info)
     }
     log_info("PIC/PIT initialized.");
     heap_verify_checkpoint("Heap verified after PIC/PIT init");
-    __asm__ volatile("sti");
+    
+    extern void cpu_init(void);
+    extern void syscall_enable(void);
+    cpu_init();
+    syscall_enable();
+    
+    arch_irq_enable();
     /* wait a few ticks to confirm timer interrupt fires */
     uint64_t start_ticks = idt_get_timer_ticks();
     uint64_t wait_loops = 0;
     while (idt_get_timer_ticks() - start_ticks < 5 && wait_loops < 1000000) {
-        __asm__ volatile("hlt");
+        arch_halt();
         ++wait_loops;
     }
     log_info_hex("Timer ticks observed", idt_get_timer_ticks());

@@ -258,45 +258,7 @@ int user_prepare_image(const char *path, const char *const *argv, const char *co
     return 0;
 }
 
-void user_enter(uint64_t entry, uint64_t user_stack, uint64_t pml4_phys)
-{
-    uint64_t rsp0;
-    __asm__ volatile("mov %%rsp, %0" : "=r"(rsp0));
-    gdt_set_kernel_stack(rsp0);
 
-    if (pml4_phys) {
-        __asm__ volatile("mov %0, %%cr3" : : "r"(pml4_phys) : "memory");
-    }
-
-    __asm__ volatile(
-        "pushq %[user_ss]\n"
-        "pushq %[user_rsp]\n"
-        "pushfq\n"
-        "popq %%rax\n"
-        "orq $0x200, %%rax\n"
-        "pushq %%rax\n"
-        "pushq %[user_cs]\n"
-        "pushq %[user_rip]\n"
-        "iretq\n"
-        :
-        : [user_ss] "i"(GDT_USER_DATA | 0x3),
-          [user_rsp] "r"(user_stack),
-          [user_cs] "i"(GDT_USER_CODE | 0x3),
-          [user_rip] "r"(entry)
-        : "rax", "memory");
-
-    __builtin_unreachable();
-}
-
-__attribute__((naked, noreturn)) void user_exit_trampoline(void)
-{
-    __asm__ volatile(
-        "add $16, %rsp\n"
-        "call user_exit_handler\n"
-        "1: hlt\n"
-        "jmp 1b\n"
-    );
-}
 
 void user_smoke_thread(void *arg)
 {
@@ -314,7 +276,7 @@ void user_smoke_thread(void *arg)
     log_info("Entering user-mode init");
     sched_set_current_aspace(space.pml4_phys);
     sched_set_current_exit_to_kernel(1);
-    user_enter(space.entry, user_sp, space.pml4_phys);
+    arch_enter_user(space.entry, user_sp, space.pml4_phys);
 }
 
 void user_launch_thread(void *arg)
@@ -336,5 +298,5 @@ void user_launch_thread(void *arg)
     kfree(launch);
     sched_set_current_aspace(space.pml4_phys);
     sched_set_current_exit_to_kernel(0);
-    user_enter(space.entry, user_sp, space.pml4_phys);
+    arch_enter_user(space.entry, user_sp, space.pml4_phys);
 }

@@ -1,0 +1,11 @@
+/home/zli/Documents/Coding/OSBranch/NeptuneOS/build/CMakeFiles/kernel-x86_64.dir
+/home/zli/Documents/Coding/OSBranch/NeptuneOS/build/CMakeFiles/iso.dir
+/home/zli/Documents/Coding/OSBranch/NeptuneOS/build/CMakeFiles/run.dir
+/home/zli/Documents/Coding/OSBranch/NeptuneOS/build/CMakeFiles/run-headless.dir
+/home/zli/Documents/Coding/OSBranch/NeptuneOS/build/CMakeFiles/run-arm64.dir
+/home/zli/Documents/Coding/OSBranch/NeptuneOS/build/CMakeFiles/run-arm64-headless.dir
+/home/zli/Documents/Coding/OSBranch/NeptuneOS/build/CMakeFiles/regression.dir
+/home/zli/Documents/Coding/OSBranch/NeptuneOS/build/CMakeFiles/fuzz.dir
+/home/zli/Documents/Coding/OSBranch/NeptuneOS/build/CMakeFiles/distclean.dir
+/home/zli/Documents/Coding/OSBranch/NeptuneOS/build/CMakeFiles/edit_cache.dir
+/home/zli/Documents/Coding/OSBranch/NeptuneOS/build/CMakeFiles/rebuild_cache.dir

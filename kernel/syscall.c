@@ -391,7 +391,7 @@ uint64_t syscall_handle(struct syscall_regs *regs, struct interrupt_frame *frame
             return syscall_error(SYSCALL_ENOENT);
         }
         sched_set_current_aspace(space.pml4_phys);
-        user_enter(space.entry, user_sp, space.pml4_phys);
+        arch_enter_user(space.entry, user_sp, space.pml4_phys);
         __builtin_unreachable();
     }
     case SYSCALL_GETPID:

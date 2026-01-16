@@ -116,16 +116,9 @@ static uint64_t *ensure_table(uint64_t *parent, uint16_t index, uint64_t flags)
     return (uint64_t *)table_ptr(phys);
 }
 
-static inline void invlpg(uint64_t virt)
-{
-    __asm__ volatile("invlpg (%0)" ::"r"(virt) : "memory");
-}
 
-void mmu_reload_cr3(void)
-{
-    uint64_t phys = (uint64_t)pml4_table;
-    __asm__ volatile("mov %0, %%cr3" : : "r"(phys) : "memory");
-}
+
+
 
 uint64_t mmu_create_user_pml4(void)
 {
@@ -214,7 +207,7 @@ void mmu_map_page(uint64_t virt, uint64_t phys, uint64_t flags)
     }
 
     pt[pt_index] = entry;
-    invlpg(virt);
+    arch_invlpg(virt);
 }
 
 int mmu_map_page_in(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint64_t flags)
@@ -298,7 +291,7 @@ void mmu_unmap_page(uint64_t virt)
     }
 
     pt[pt_index] = 0;
-    invlpg(virt);
+    arch_invlpg(virt);
 }
 
 static inline uint64_t align_down_4k(uint64_t value) { return value & ~0xFFFULL; }

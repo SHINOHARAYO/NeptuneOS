@@ -2,8 +2,10 @@
 
 #include <stdint.h>
 
-#define HIGHER_HALF_BASE 0xFFFFFFFF80000000ULL
-#define HHDM_BASE 0xFFFF800000000000ULL
+#include <arch/mmu.h>
+
+#define HIGHER_HALF_BASE ARCH_HIGHER_HALF_BASE
+#define HHDM_BASE ARCH_HHDM_BASE
 
 #define MMU_FLAG_WRITE 0x2ULL
 #define MMU_FLAG_USER  0x4ULL
@@ -49,7 +51,9 @@ void mmu_map_page(uint64_t virt, uint64_t phys, uint64_t flags);
 void mmu_unmap_page(uint64_t virt);
 
 /* Reload CR3 to flush TLB entries after page table changes. */
-void mmu_reload_cr3(void);
+static inline void mmu_reload_cr3(void) {
+    arch_mmu_flush_tlb();
+}
 
 /* Create a new PML4 with kernel mappings copied into the higher half. */
 uint64_t mmu_create_user_pml4(void);

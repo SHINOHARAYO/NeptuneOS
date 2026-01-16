@@ -8,33 +8,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define STACK_SIZE 16384
 
-enum thread_state {
-    THREAD_UNUSED = 0,
-    THREAD_RUNNABLE,
-    THREAD_RUNNING,
-    THREAD_BLOCKED,
-    THREAD_DEAD,
-};
 
-struct thread {
-    struct thread *next;
-    struct thread *prev;
-    struct thread *wait_next;
-    struct context ctx;
-    void (*entry)(void *);
-    void *arg;
-    uint8_t *stack;
-    enum thread_state state;
-    uint64_t aspace;
-    uint8_t exit_to_kernel;
-    int pid;
-    int ppid;
-    int exit_code;
-    uint8_t is_user;
-    uint8_t reaped;
-};
+
 
 static struct thread *threads_head = NULL;
 static struct thread *threads_tail = NULL;
@@ -106,10 +82,7 @@ static void thread_trampoline(void)
     sched_exit();
 }
 
-static inline void load_cr3(uint64_t phys)
-{
-    __asm__ volatile("mov %0, %%cr3" : : "r"(phys) : "memory");
-}
+
 
 static void sched_resched_locked(void);
 
@@ -166,12 +139,7 @@ int sched_create(void (*entry)(void *), void *arg)
         return -1;
     }
 
-    uint64_t stack_top = (uint64_t)thread->stack + STACK_SIZE;
-    stack_top = (stack_top & ~0xFULL) - 8;
-    *(uint64_t *)stack_top = 0;
-    thread->ctx.rsp = stack_top;
-    thread->ctx.rip = (uint64_t)thread_trampoline;
-    thread->ctx.rflags = 0x2; /* IF=0, MUST enable in trampoline release */
+    arch_thread_setup(thread, thread_trampoline);
 
     spinlock_release_irqrestore(&sched_lock);
     return 0;
@@ -210,12 +178,7 @@ int sched_create_user(void (*entry)(void *), void *arg, int parent_pid, int *out
         return -1;
     }
 
-    uint64_t stack_top = (uint64_t)thread->stack + STACK_SIZE;
-    stack_top = (stack_top & ~0xFULL) - 8;
-    *(uint64_t *)stack_top = 0;
-    thread->ctx.rsp = stack_top;
-    thread->ctx.rip = (uint64_t)thread_trampoline;
-    thread->ctx.rflags = 0x2; /* IF=0 */
+    arch_thread_setup(thread, thread_trampoline);
 
     if (out_pid) {
         *out_pid = thread->pid;
@@ -257,7 +220,7 @@ static void sched_resched_locked(void)
         }
         if (current_thread->state == THREAD_DEAD) {
              spinlock_release_irqrestore(&sched_lock);
-             for (;;) __asm__ volatile("hlt");
+             for (;;) arch_halt();
         }
         return;
     }
@@ -277,10 +240,11 @@ static void sched_resched_locked(void)
     need_resched = 0;
     
     if (next_thread->aspace) {
-        load_cr3(next_thread->aspace);
+        arch_mmu_set_aspace(next_thread->aspace);
     } else {
-        mmu_reload_cr3();
+        arch_mmu_flush_tlb();
     }
+    arch_thread_switch(next_thread);
     context_switch(&prev->ctx, &next_thread->ctx);
 }
 
@@ -308,7 +272,7 @@ static void sched_exit(void)
        We release lock and loop? */
     spinlock_release_irqrestore(&sched_lock);
     for (;;) {
-        __asm__ volatile("hlt");
+        arch_halt();
     }
 }
 

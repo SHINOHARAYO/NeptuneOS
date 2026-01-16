@@ -14,7 +14,11 @@ extern char _kernel_start;
 extern char _kernel_phys_start;
 extern char _kernel_phys_end;
 
+#ifdef __aarch64__
+#define META_REGION_LIMIT (16ULL << 30) /* 16 GiB */
+#else
 #define META_REGION_LIMIT (1ULL << 30) /* prefer metadata below 1 GiB */
+#endif
 
 struct multiboot_tag {
     uint32_t type;
@@ -59,10 +63,12 @@ static uint64_t align_up(uint64_t value, uint64_t align)
     return (value + align - 1) & ~(align - 1);
 }
 
+#ifndef __aarch64__
 static uint64_t align_down(uint64_t value, uint64_t align)
 {
     return value & ~(align - 1);
 }
+#endif
 
 static inline uint8_t *bitmap_virt(const struct pmm_region *region)
 {
@@ -102,6 +108,7 @@ static void add_region(uint64_t start, uint64_t end)
     region->total_pages = (end - start) / 4096;
 }
 
+#ifndef __aarch64__
 static void choose_regions(uint64_t info_addr)
 {
     region_count = 0;
@@ -162,6 +169,7 @@ static void choose_regions(uint64_t info_addr)
         panic("No available memory region for allocator", 0);
     }
 }
+#endif
 
 static void setup_bitmaps(void)
 {
@@ -272,7 +280,22 @@ static struct pmm_region *find_region(uint64_t addr)
 
 void mem_init(uint64_t multiboot_info)
 {
+#ifdef __aarch64__
+    (void)multiboot_info;
+    log_info("Initializing AArch64 memory...");
+    /* Hardcode 1GB RAM starting from kernel end to 0x80000000 */
+    uint64_t k_end = (uint64_t)&_kernel_end;
+    k_end = align_up(k_end, 4096);
+    uint64_t ram_end = 0x80000000;
+    
+    add_region(k_end, ram_end);
+    max_phys_end = ram_end;
+    
+    /* We must populate region_count etc manually or via add_region */
+    /* add_region increments region_count */
+#else
     choose_regions(multiboot_info);
+#endif
     setup_bitmaps();
 
     console_write("PMM regions: ");

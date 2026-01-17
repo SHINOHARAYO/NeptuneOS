@@ -2,6 +2,7 @@
 #include <kernel/io.h>
 #include <kernel/log.h>
 #include <kernel/timer.h>
+#include <kernel/syscall.h>
 
 static inline void mmio_write32(uint64_t addr, uint32_t val)
 {
@@ -88,15 +89,19 @@ void pic_enable_irq(int irq)
 void irq_dispatch(uint8_t irq);
 void arm_timer_reload(void);
 
-void arm_irq_handler(void)
+/* Called from vectors.s */
+void arm_irq_handler(struct syscall_regs *regs)
 {
+    (void)regs;
     uint32_t iar = gic_acknowledge_irq();
     uint32_t irq = iar & 0x3FF;
 
     if (irq < 1020) {
+#include <kernel/serial.h>
+/* ... */
         if (irq == 33) {
-            /* Map back to generic IRQ 4 for Serial */
-            irq_dispatch(4);
+            /* Handled by serial driver directly */
+            serial_handler();
         } else if (irq == 30) {
             /* Timer IRQ (PPI 30) -> IRQ 0 (PIT) */
             arm_timer_reload();

@@ -35,11 +35,9 @@ void acpi_dump(void) {}
 void mmu_map_hhdm_2m(uint64_t phys_start, uint64_t phys_end) { (void)phys_start; (void)phys_end; }
 void mmu_map_page(uint64_t virt, uint64_t phys, uint64_t flags) { (void)virt; (void)phys; (void)flags; }
 void mmu_unmap_page(uint64_t virt) { (void)virt; }
-uint64_t mmu_create_user_pml4(void) { return 0; }
+
 void mmu_protect_kernel_sections(void) {}
-int mmu_map_page_in(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint64_t flags) {
-    (void)pml4_phys; (void)virt; (void)phys; (void)flags; return 0;
-}
+
 
 /* Memset stub */
 void *memset(void *s, int c, size_t n) {

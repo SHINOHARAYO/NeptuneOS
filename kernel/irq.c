@@ -38,7 +38,7 @@ static void kb_push(uint8_t sc)
     }
 }
 
-static void com_push(uint8_t ch)
+void irq_com_push(uint8_t ch)
 {
     uint32_t next = (com_head + 1) % COM_BUF_SIZE;
     if (next != com_tail) {
@@ -62,7 +62,7 @@ void irq_dispatch(uint8_t irq)
         uint8_t lsr = inb(COM1_PORT + 5);
         if (lsr & 0x01) {
             uint8_t ch = inb(COM1_PORT);
-            com_push(ch);
+            irq_com_push(ch);
         } else {
             /* read IIR to clear pending */
             (void)inb(COM1_PORT + 2);

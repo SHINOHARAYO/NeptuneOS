@@ -5,6 +5,10 @@
 #define ARCH_HIGHER_HALF_BASE 0xFFFFFFFF80000000ULL
 #define ARCH_HHDM_BASE 0xFFFF800000000000ULL
 
+#define ARCH_PTE_PRESENT 0x1ULL
+#define ARCH_PTE_USER    0x4ULL
+#define ARCH_PTE_IS_HUGE(x) ((x) & 0x80ULL)
+
 static inline void arch_mmu_flush_tlb(void)
 {
     uint64_t phys;

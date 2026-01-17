@@ -5,6 +5,9 @@
 #include "kernel/serial.h"
 #include "kernel/mmu.h"
 #include "kernel/spinlock.h"
+#ifdef __aarch64__
+#include "kernel/fdt.h"
+#endif
 
 #include <stdint.h>
 #include <stddef.h>
@@ -283,13 +286,51 @@ void mem_init(uint64_t multiboot_info)
 #ifdef __aarch64__
     (void)multiboot_info;
     log_info("Initializing AArch64 memory...");
-    /* Hardcode 1GB RAM starting from kernel end to 0x80000000 */
+    
+    uint64_t ram_start = 0;
+    uint64_t ram_size = 0;
+    
+    if (multiboot_info == 0) {
+        log_warn("FDT Address is 0. Scanning common locations...");
+        uint64_t candidates[] = { 0x40000000, 0x44000000, 0x48000000, 0x40001000 };
+        for (int i = 0; i < 4; ++i) {
+
+             if (fdt_get_memory(candidates[i], &ram_start, &ram_size)) {
+                 log_info_hex("FDT found at", candidates[i]);
+                 multiboot_info = candidates[i];
+                 break;
+             }
+        }
+    }
+    
+    if (multiboot_info && fdt_get_memory(multiboot_info, &ram_start, &ram_size)) {
+        log_info("FDT Memory Detection Successful");
+        log_info_hex("RAM Start", ram_start);
+        log_info_hex("RAM Size", ram_size);
+    } else {
+        log_info_hex("FDT Address", multiboot_info);
+        log_warn("FDT Memory Detection Failed. Fallback to 4GB.");
+        ram_start = 0x40000000;
+        ram_size = 0x100000000ULL; /* 4GB */
+    }
+
     uint64_t k_end = (uint64_t)&_kernel_end;
     k_end = align_up(k_end, 4096);
-    uint64_t ram_end = 0x80000000;
     
-    add_region(k_end, ram_end);
-    max_phys_end = ram_end;
+    /* Ensure we don't map kernel memory as free */
+    if (k_end > ram_start) {
+        /* If kernel is inside this region, start after kernel */
+        /* Assuming one big region for now (QEMU virt usually gives one contiguous block) */
+        /* If multiple regions, we'd need loop. */
+        uint64_t region_end = ram_start + ram_size;
+        if (k_end < region_end) {
+            add_region(k_end, region_end);
+            max_phys_end = region_end;
+        }
+    } else {
+        add_region(ram_start, ram_start + ram_size);
+        max_phys_end = ram_start + ram_size;
+    }
     
     /* We must populate region_count etc manually or via add_region */
     /* add_region increments region_count */

@@ -18,6 +18,7 @@ static uint8_t cursor_row = 0;
 static uint8_t cursor_col = 0;
 static spinlock_t console_lock;
 
+#ifndef __aarch64__
 static void update_hw_cursor(void)
 {
     uint16_t pos = (uint16_t)((cursor_row * VGA_COLS) + cursor_col);
@@ -76,9 +77,11 @@ static void put_char_unlocked(char c)
     advance_cursor();
     update_hw_cursor();
 }
+#endif
 
 void console_backspace(void)
 {
+#ifndef __aarch64__
     spinlock_acquire_irqsave(&console_lock);
     if (cursor_row == 0 && cursor_col == 0) {
         spinlock_release_irqrestore(&console_lock);
@@ -96,10 +99,12 @@ void console_backspace(void)
     vga_buffer[index] = ((uint16_t)current_color << 8) | ' ';
     update_hw_cursor();
     spinlock_release_irqrestore(&console_lock);
+#endif
 }
 
 void console_clear(uint8_t color)
 {
+#ifndef __aarch64__
     spinlock_acquire_irqsave(&console_lock);
     current_color = color;
     cursor_row = 0;
@@ -109,26 +114,38 @@ void console_clear(uint8_t color)
     }
     update_hw_cursor();
     spinlock_release_irqrestore(&console_lock);
+#else
+    (void)color;
+#endif
 }
 
 void console_set_color(uint8_t color)
 {
+#ifndef __aarch64__
     spinlock_acquire_irqsave(&console_lock);
     current_color = color;
     spinlock_release_irqrestore(&console_lock);
+#else
+    (void)color;
+#endif
 }
 
 void console_write(const char *msg)
 {
+#ifndef __aarch64__
     spinlock_acquire_irqsave(&console_lock);
     for (size_t i = 0; msg[i] != '\0'; ++i) {
         put_char_unlocked(msg[i]);
     }
     spinlock_release_irqrestore(&console_lock);
+#else
+    (void)msg;
+#endif
 }
 
 void console_write_len(const char *msg, uint64_t len)
 {
+#ifndef __aarch64__
     if (!msg || len == 0) {
         return;
     }
@@ -137,6 +154,9 @@ void console_write_len(const char *msg, uint64_t len)
         put_char_unlocked(msg[i]);
     }
     spinlock_release_irqrestore(&console_lock);
+#else
+    (void)msg; (void)len;
+#endif
 }
 
 static char hex_digit(uint8_t value)
@@ -146,6 +166,7 @@ static char hex_digit(uint8_t value)
 
 void console_write_hex(uint64_t value)
 {
+#ifndef __aarch64__
     spinlock_acquire_irqsave(&console_lock);
     put_char_unlocked('0');
     put_char_unlocked('x');
@@ -154,4 +175,7 @@ void console_write_hex(uint64_t value)
         put_char_unlocked(hex_digit(nibble));
     }
     spinlock_release_irqrestore(&console_lock);
+#else
+    (void)value;
+#endif
 }

@@ -193,6 +193,36 @@ void terminal_thread(void *arg)
                 console_write((char[2]){c, '\0'});
             }
         }
+        
+        /* Handle Serial Input */
+        uint8_t ch;
+        while (irq_com_pop(&ch)) {
+             if (ch == '\r' || ch == '\n') {
+                console_write("\n");
+                line[len] = '\0';
+                terminal_execute(line);
+                len = 0;
+                line[0] = '\0';
+                continue;
+            }
+            if (ch == 0x08 || ch == 0x7F) { /* Backspace or DEL */
+                if (len > 0) {
+                    --len;
+                    line[len] = '\0';
+                    console_backspace();
+                }
+                continue;
+            }
+            /* Printable characters */
+            if (ch >= 0x20 && ch < 0x7F) {
+                if (len + 1 < LINE_MAX) {
+                    line[len++] = ch;
+                    line[len] = '\0';
+                    console_write((char[2]){ch, '\0'});
+                }
+            }
+        }
+
         sched_maybe_preempt();
     }
 }

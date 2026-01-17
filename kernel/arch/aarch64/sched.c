@@ -21,11 +21,12 @@ void arch_thread_setup(struct thread *t, void (*trampoline)(void))
     /* Zero other registers? Not strictly needed for kernel threads */
 }
 
+extern void enter_user_aarch64(uint64_t entry, uint64_t stack, uint64_t pml4);
+
 void arch_enter_user(uint64_t entry, uint64_t stack, uint64_t pml4)
 {
-    /* TODO: Implement ERET to user mode */
-    (void)entry; (void)stack; (void)pml4;
-    arch_halt();
+    enter_user_aarch64(entry, stack, pml4);
+    __builtin_unreachable();
 }
 
 void arch_thread_switch(struct thread *next)

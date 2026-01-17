@@ -6,6 +6,10 @@ void _start(void)
     sys_write(1, msg, strlen(msg));
     sys_exit(0);
     for (;;) {
+#ifdef __aarch64__
+        __asm__ volatile("wfi");
+#else
         __asm__ volatile("hlt");
+#endif
     }
 }

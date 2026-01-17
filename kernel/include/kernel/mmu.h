@@ -13,6 +13,14 @@
 #define MMU_FLAG_GLOBAL (1ULL << 8)
 #define MMU_FLAG_COW (1ULL << 9)
 
+#define MMU_FAULT_PROTECT 0x1
+#define MMU_FAULT_WRITE   0x2
+#define MMU_FAULT_USER    0x4
+#define MMU_FAULT_EXEC    0x8
+
+/* Handle a page fault given the fault address (CR2/FAR) and error flags. Returns 1 if handled, 0 otherwise. */
+int mmu_handle_fault(uint64_t addr, int flags);
+
 static inline uint64_t phys_to_higher_half(uint64_t phys)
 {
     return phys + HIGHER_HALF_BASE;

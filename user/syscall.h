@@ -18,11 +18,23 @@ enum {
 static inline long syscall3(long num, long a1, long a2, long a3)
 {
     long ret;
+#ifdef __aarch64__
+    register long x8 __asm__("x8") = num;
+    register long x0 __asm__("x0") = a1;
+    register long x1 __asm__("x1") = a2;
+    register long x2 __asm__("x2") = a3;
+    __asm__ volatile("svc #0"
+        : "=r"(x0)
+        : "r"(x8), "r"(x0), "r"(x1), "r"(x2)
+        : "memory", "cc");
+    ret = x0;
+#else
     __asm__ volatile(
         "syscall"
         : "=a"(ret)
         : "a"(num), "D"(a1), "S"(a2), "d"(a3)
         : "rcx", "r11", "memory");
+#endif
     return ret;
 }
 

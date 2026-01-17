@@ -117,13 +117,13 @@ static void idle_thread(void *arg)
 }
 
 
-void kernel_main(uint32_t magic, uint32_t multiboot_info)
+void kernel_main(uint64_t magic, uint64_t multiboot_info)
 {
-    if (magic != MULTIBOOT2_MAGIC) {
+    if ((uint32_t)magic != MULTIBOOT2_MAGIC) {
         panic("Invalid multiboot2 magic", magic);
     }
 
-    const uint64_t multiboot_info_phys = (uint64_t)multiboot_info;
+    const uint64_t multiboot_info_phys = multiboot_info;
     volatile uint32_t multiboot_size = *(volatile uint32_t *)multiboot_info_phys; /* identity-mapped early */
     (void)multiboot_size;
 

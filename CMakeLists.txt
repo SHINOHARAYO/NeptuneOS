@@ -57,6 +57,7 @@ set(KERNEL_SOURCES_X86_64
     kernel/pci.c
     kernel/acpi.c
     kernel/ata.c
+    kernel/console.c
 )
 
 set(KERNEL_SOURCES_AARCH64
@@ -70,6 +71,8 @@ set(KERNEL_SOURCES_AARCH64
     kernel/arch/aarch64/gic.c
     kernel/arch/aarch64/timer.c
     kernel/arch/aarch64/trampolines.s
+    kernel/arch/aarch64/mmu.c
+    kernel/arch/aarch64/fdt.c
 )
 
 if(ARCH STREQUAL "x86_64")
@@ -163,13 +166,13 @@ add_custom_target(run-headless
 )
 
 add_custom_target(run-arm64
-    COMMAND qemu-system-aarch64 -M virt -cpu cortex-a57 -kernel $<TARGET_FILE:kernel-${ARCH}> -serial stdio -m 1G -no-reboot -no-shutdown
+    COMMAND qemu-system-aarch64 -M virt -cpu cortex-a57 -kernel $<TARGET_FILE:kernel-${ARCH}> -serial stdio -m 4G -no-reboot -no-shutdown
     DEPENDS kernel-${ARCH}
     USES_TERMINAL
 )
 
 add_custom_target(run-arm64-headless
-    COMMAND qemu-system-aarch64 -M virt -cpu cortex-a57 -kernel $<TARGET_FILE:kernel-${ARCH}> -nographic -m 1G -no-reboot -no-shutdown
+    COMMAND qemu-system-aarch64 -M virt -cpu cortex-a57 -kernel $<TARGET_FILE:kernel-${ARCH}> -nographic -m 4G -no-reboot -no-shutdown
     DEPENDS kernel-${ARCH}
     USES_TERMINAL
 )

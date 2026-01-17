@@ -1,0 +1,55 @@
+[100%] Built target kernel-aarch64
+[INFO ] Booting 64-bit kernel...
+[INFO ] Initializing IDT (early)...
+[INFO ] IDT initialized.
+[INFO ] Initializing physical memory manager...
+[INFO ] Initializing AArch64 memory...
+[WARN ] FDT Address is 0. Scanning common locations...
+[INFO ] FDT Address: 0x0000000000000000
+[WARN ] FDT Memory Detection Failed. Fallback to 4GB.
+PMM regions: 0x0000000000000001
+Total managed bytes: 0x00000000FFB24000
+PMM regions: 0x0000000000000001
+Total managed bytes: 0x00000000FFB24000
+Region 0x0000000000000000: 0x00000000404BC000 - 0x0000000140000000 pages=0x00000000000FFB24
+Region 0x0000000000000000: 0x00000000404BC000 - 0x0000000140000000 pages=0x00000000000FFB24
+[INFO ] Physical memory allocator ready.
+[INFO ] Physical memory manager initialized.
+[INFO ] Maximum managed physical address: 0x0000000140000000
+[INFO ] Extending higher-half direct map...
+[INFO ] Higher-half direct map updated.
+[INFO ] Applying kernel section protections...
+[INFO ] Kernel sections protected.
+[INFO ] Write-protect enabled.
+[INFO ] Protecting VGA mapping (RW/NX)...
+[INFO ] VGA mapping protected.
+[INFO ] Initializing kernel heap...
+[INFO ] Kernel heap initialized.
+[INFO ] Block devices initialized.
+[INFO ] FAT16 volume mounted.
+[INFO ] Kernel heap free tracking enabled.
+[INFO ] Relocating GDT...
+[INFO ] Rebuilding IDT on heap...
+[INFO ] IDT relocated to heap.
+[INFO ] Remapping PIC and enabling timer...
+[INFO ] GICv2 Initialized
+[INFO ] ARM Generic Timer: Frequency read
+[INFO ] ARM Generic Timer initialized
+[INFO ] PIC/PIT initialized.
+[INFO ] Timer ticks observed: 0x0000000000000005
+[INFO ] Heap allocs: 0x0000000000000004
+[INFO ] Heap frees: 0x0000000000000004
+[INFO ] Heap large allocs: 0x0000000000000000
+[INFO ] Heap large reuses: 0x0000000000000000
+[INFO ] Heap free slab bytes: 0x0000000000002940
+[INFO ] Heap free large bytes: 0x0000000000000000
+0x00000000404DF000 0x00000000404E0000
+[INFO ] Allocator self-test passed.
+[INFO ] Dropping identity map; switching to higher-half only.
+[INFO ] Dropped identity map; higher-half only.
+[INFO ] Starting scheduler...
+[INFO ] Entering user-mode init
+qemu-system-aarch64: terminating on signal 15 from pid 25251 (/usr/bin/gmake)
+gmake[2]: *** [CMakeFiles/Makefile2:255: CMakeFiles/run-arm64-headless.dir/all] Terminated
+gmake[1]: *** [CMakeFiles/Makefile2:262: CMakeFiles/run-arm64-headless.dir/rule] Terminated
+gmake: *** [Makefile:189: run-arm64-headless] Terminated

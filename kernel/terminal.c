@@ -9,6 +9,7 @@
 #include "kernel/acpi.h"
 
 #include <stdint.h>
+#include <arch/processor.h>
 
 #define LINE_MAX 128
 
@@ -126,8 +127,16 @@ static void terminal_execute(const char *line)
     }
     if (streq(line, "logerror")) {
         log_set_level(LOG_LEVEL_ERROR);
-        console_write("Log level set to error\n");
-        terminal_prompt();
+        return;
+    }
+    if (streq(line, "reboot")) {
+        console_write("Rebooting...\n");
+        arch_reboot();
+        return;
+    }
+    if (streq(line, "shutdown")) {
+        console_write("Shutting down...\n");
+        arch_shutdown();
         return;
     }
     console_write("Unknown command: ");

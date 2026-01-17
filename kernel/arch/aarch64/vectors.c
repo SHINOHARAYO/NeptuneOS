@@ -19,6 +19,7 @@ void arm_sync_handler(struct syscall_regs *regs)
     /* SVC Instruction Execution in AArch64 state */
     if (ec == 0x15) {
         /* Syscall */
+        log_info_hex("SVC entry, nr", regs->rax);
         struct interrupt_frame frame = {0}; /* Dummy */
         uint64_t ret = syscall_handle(regs, &frame);
         

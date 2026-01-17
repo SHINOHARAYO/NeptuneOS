@@ -59,106 +59,120 @@ master_cpu:
     */
     
     /* Clear tables */
-    ldr x0, =page_tables_start
-    ldr x1, =page_tables_end
+    adrp x0, page_tables_start
+    add x0, x0, :lo12:page_tables_start
+    adrp x1, page_tables_end
+    add x1, x1, :lo12:page_tables_end
     sub x2, x1, x0
     mov x1, #0
 1:  str xzr, [x0], #8
     sub x2, x2, #8
     cbnz x2, 1b
 
-    ldr x0, =boot_pml4
+    adrp x0, boot_pml4
+    add x0, x0, :lo12:boot_pml4
     
-    /* Identity Map (0x40000000 is 1GB start). 
-       We map first 512GB via L0[0].
-       L0[0] -> boot_low_pdpt
-    */
-    ldr x1, =boot_low_pdpt
+    /* Identity Map L0[0] -> boot_low_pdpt (For current PC execution) */
+    adrp x1, boot_low_pdpt
+    add x1, x1, :lo12:boot_low_pdpt
     mov x2, #3 /* Table, Valid */
     orr x2, x1, x2
-    str x2, [x0]
+    str x2, [x0] /* Index 0 */
 
-    /* Higher Half Map. 
-       Virt 0xFFFFFFFF80000000. 
-       L0 index = 511.
-       L0[511] -> boot_high_pdpt
-    */
-    ldr x1, =boot_high_pdpt
+    /* Index 256 (HHDM Start 0xFFFF8000...) -> boot_high_pdpt */
+    adrp x1, boot_high_pdpt
+    add x1, x1, :lo12:boot_high_pdpt
     mov x2, #3
     orr x2, x1, x2
-    str x2, [x0, #511 * 8]
-
-    /* Index 256 (L0): HHDM -> boot_high_pdpt.
-       HHDM Base 0xFFFF8000... is Index 256 in L0.
-    */
     str x2, [x0, #256 * 8]
 
-    /* Setup Low PDPT (Identity).
-       Slot 0 (0-1GB) covers 0x00000000 - 0x3FFFFFFF (includes 0x09000000).
-       Entry 0: Output 0x00000000.
-       Attributes: AttrIndx=1 (Device), AF=1, Valid=1, Block(0).
-    */
-    ldr x0, =boot_low_pdpt
+    /* Index 511 (Kernel High 0xFFFF....) -> boot_high_pdpt */
+    str x2, [x0, #511 * 8]
+
+    /* Setup Low PDPT (Identity) */
+    adrp x0, boot_low_pdpt
+    add x0, x0, :lo12:boot_low_pdpt
+    /* Index 0: 0-1GB (UART) -> Device (Attr0) */
     mov x1, #0
-    ldr x2, =((1 << 10) | (1 << 2) | 1)
-    orr x2, x2, x1
-    str x2, [x0, #0] /* Index 0 */
-
-    /* Index 1: 0x40000000 (1GB). Normal Memory. 
-       AttrIndx=0.
-    */
-    ldr x1, =0x40000000
-    ldr x2, =((1 << 10) | (3 << 8) | 1) /* AF | SH | Valid(1) | Block(0) */
-    orr x2, x2, x1
-    str x2, [x0, #8] /* Index 1 */
-
-    /* Setup High PDPT (HHDM).
-       We populate:
-       Index 0, 1, 2 -> Phys 0, 1GB, 2GB (For HHDM at L0[256]).
-       Index 510, 511 -> Phys 0, 1GB (For Kernel at L0[511]).
-    */
-    ldr x0, =boot_high_pdpt
+    ldr x2, =((1 << 10) | (1 << 2) | 1) /* Attr0=Device? Wait, MAIR Attr0=00(Device). Attr1=FF(Normal).
+                                            PTE 4:2 = AttrIndex.
+                                            000 = Attr0.
+                                            001 = Attr1.
+                                            So we want 0 for Device, 4 (1<<2) for Normal. */
+    /* Check previous code: */
+    /* ldr x2, =((1 << 10) | (3 << 8) | 1) */ 
+    /* Bits 4:2 are 0. So this IS Attr0 (Device). Correct for UART. */
     
-    /* Index 0: Phys 0 */
-    mov x1, #0
-    ldr x2, =((1 << 10) | (3 << 8) | 1)
+    /* We want SH=0 (Outer Shareable) for Device? Or SH=3 (Inner)?
+       Device-nGnRnE implies SH is ignored (Always Outer Shareable equivalent).
+       So (3<<8) or (0<<8) is fine. 
+       Let's stick to simple:
+       Device: AF=1, Valid=1, AttrIdx=0.
+       (1<<10) | 1.
+    */
+    ldr x2, =((1 << 10) | 1)
     orr x2, x2, x1
     str x2, [x0, #0]
-
-    /* Index 1: Phys 1GB */
+    
+    /* Index 1: 1GB-2GB (Code) -> Normal (Attr1) */
     ldr x1, =0x40000000
-    ldr x2, =((1 << 10) | (3 << 8) | 1)
+    /* Normal: AF=1, SH=3 (Inner), AttrIdx=1, Valid=1 */
+    /* (1<<10) | (3<<8) | (1<<2) | 1 */
+    ldr x2, =((1 << 10) | (3 << 8) | (1 << 2) | 1)
     orr x2, x2, x1
     str x2, [x0, #8]
 
-    /* Index 2: Phys 2GB */
+
+    /* Setup High PDPT (HHDM and Kernel) -> Normal for all RAM */
+    adrp x0, boot_high_pdpt
+    add x0, x0, :lo12:boot_high_pdpt
+    
+    /* --- HHDM Mappings --- */
+    /* Index 0: Phys 0 (UART?) -> Device */
+    mov x1, #0
+    ldr x2, =((1 << 10) | 1) /* Device */
+    orr x2, x2, x1
+    str x2, [x0, #0]
+    
+    /* Index 1: Phys 1GB (RAM) -> Normal */
+    ldr x1, =0x40000000
+    ldr x2, =((1 << 10) | (3 << 8) | (1 << 2) | 1)
+    orr x2, x2, x1
+    str x2, [x0, #8]
+    
+    /* Index 2: Phys 2GB (RAM) -> Normal */
     ldr x1, =0x80000000
-    ldr x2, =((1 << 10) | (3 << 8) | 1)
+    ldr x2, =((1 << 10) | (3 << 8) | (1 << 2) | 1)
     orr x2, x2, x1
     str x2, [x0, #16]
 
-    /* Index 510: Phys 0 */
-    mov x1, #0
-    ldr x2, =((1 << 10) | (3 << 8) | 1)
-    orr x2, x2, x1
-    str x2, [x0, #4080] /* Index 510 * 8 = 4080 */
-
-    /* Index 511: Phys 1GB */
+    /* --- Kernel Higher Half Mappings --- */
+    /* Index 510: Map to Phys 1GB (Code) -> Normal */
     ldr x1, =0x40000000
-    ldr x2, =((1 << 10) | (3 << 8) | 1)
+    ldr x2, =((1 << 10) | (3 << 8) | (1 << 2) | 1)
     orr x2, x2, x1
-    str x2, [x0, #4088] /* Index 511 * 8 = 4088 */
+    str x2, [x0, #4080]
+
+    /* Index 511: Map to Phys 2GB -> Normal */
+    ldr x1, =0x80000000
+    ldr x2, =((1 << 10) | (3 << 8) | (1 << 2) | 1)
+    orr x2, x2, x1
+    str x2, [x0, #4088]
+
 
     /* Set TTBR0 and TTBR1 */
-    ldr x0, =boot_pml4
+    adrp x0, boot_pml4
+    add x0, x0, :lo12:boot_pml4
     msr ttbr0_el1, x0
     msr ttbr1_el1, x0
 
-    /* Invalidate TLB and Ensure writes are visible */
+    /* Invalidate TLB */
     dsb ish
     tlbi vmalle1is
     dsb ish
     isb
+
+    /* Debug: Print 'M' (Pre-MMU) - REMOVED */
 
     /* Enable MMU */
     mrs x0, sctlr_el1
@@ -168,19 +182,39 @@ master_cpu:
     msr sctlr_el1, x0
     isb
 
-    /* Jump to C code */
-    /* Set Vector Base Address Register again just in case */
-    ldr x0, =vector_table
+    /* Setup High Stack (Essential for Exceptions) */
+    ldr x0, =stack_top /* Loads VMA */
+    mov sp, x0
+
+    /* Set Vector Base Address Register to High Address */
+    ldr x0, =vector_table /* This loads VMA */
     msr vbar_el1, x0
-    
+
+    /* Debug: Print 'P' (Post-MMU/Stack/VBAR) - REMOVED */
+
+    /* Enable FP/SIMD (CPACR_EL1) */
+    mrs x0, cpacr_el1
+    orr x0, x0, #(3 << 20) /* FPEN = 11 (Full access) */
+    msr cpacr_el1, x0
+    isb
+
+    /* Debug: Print 'F' (Post-FP) - REMOVED */
+
+    /* Clear BSS (Moved to C) */
+
+
+    /* Debug: Print 'K' to UART - REMOVED */
+
+    /* Jump to C code in Higher Half */
     ldr x0, =0x36d76289
     mov x1, x21 /* Pass FDT pointer as multiboot_info */
-    ldr x2, =kernel_main
+    ldr x2, =kernel_main /* Loads VMA */
     br x2
 
-.section .bss
+.section .pgtables, "aw", @nobits
 .align 12
 page_tables_start:
+.global boot_pml4
 boot_pml4:
     .skip 4096
 boot_low_pdpt:

@@ -291,16 +291,8 @@ void mem_init(uint64_t multiboot_info)
     uint64_t ram_size = 0;
     
     if (multiboot_info == 0) {
-        log_warn("FDT Address is 0. Scanning common locations...");
-        uint64_t candidates[] = { 0x40000000, 0x44000000, 0x48000000, 0x40001000 };
-        for (int i = 0; i < 4; ++i) {
-
-             if (fdt_get_memory(candidates[i], &ram_start, &ram_size)) {
-                 log_info_hex("FDT found at", candidates[i]);
-                 multiboot_info = candidates[i];
-                 break;
-             }
-        }
+        log_warn("FDT Address is 0. Skipping scan to avoid crash. Fallback enabled.");
+        /* Scanning caused crashes on some setups. Rely on fallback. */
     }
     
     if (multiboot_info && fdt_get_memory(multiboot_info, &ram_start, &ram_size)) {
@@ -314,7 +306,7 @@ void mem_init(uint64_t multiboot_info)
         ram_size = 0x100000000ULL; /* 4GB */
     }
 
-    uint64_t k_end = (uint64_t)&_kernel_end;
+    uint64_t k_end = (uint64_t)&_kernel_phys_end;
     k_end = align_up(k_end, 4096);
     
     /* Ensure we don't map kernel memory as free */

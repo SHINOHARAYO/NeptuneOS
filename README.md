@@ -22,13 +22,14 @@ NeptuneOS is a hobby kernel supporting x86_64 and AArch64. It features a higher-
     - PMM, Heap, Scheduler fully integrated.
 
 #### AArch64 (ARM64)
-- **Status**: Active Development
+- **Status**: Stable
 - **Features**:
-    - **Boot**: Boot stub calling into C kernel.
-    - **Interrupts**: GICv2 driver implementation.
-    - **Timer**: ARM Generic Timer support.
-    - **HAL**: Abstracted interface for IO, Interrupts, and Context Switching.
-    - **Output**: PL011 UART Serial.
+    - **Higher Half**: Kernel runs in high virtual address space (`0xFFFFFFFF80...`).
+    - **User Mode**: Ring 3 (EL0) support with `svc` interface.
+    - **Interrupts**: GICv2 driver (Distributor/CPU Interface).
+    - **Timer**: ARM Generic Timer (EL1 Physical Timer).
+    - **Console**: PL011 UART interactive shell.
+    - **Power**: PSCI Shutdown and Reboot support.
 
 ## Prerequisites
 

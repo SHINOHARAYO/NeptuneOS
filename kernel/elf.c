@@ -3,6 +3,9 @@
 #include "kernel/mem.h"
 #include "kernel/mmu.h"
 #include "kernel/user.h"
+#include <arch/processor.h>
+
+#include <stdint.h>
 
 #include <stdint.h>
 #include <stddef.h>
@@ -166,6 +169,8 @@ int elf_load_user(const void *image, uint64_t size, struct user_space *space)
                 for (uint64_t k = 0; k < len; ++k) {
                     dst[dst_off + k] = bytes[src_off + k];
                 }
+                /* Sync I/D cache for this block if it's executable? Sync always to be safe. */
+                arch_icode_sync(dst + dst_off, len);
             }
         }
     }

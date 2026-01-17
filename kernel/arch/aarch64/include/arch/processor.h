@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 typedef uint64_t arch_flags_t;
 
@@ -20,10 +21,35 @@ static inline void arch_irq_restore(arch_flags_t flags) {
 static inline bool arch_irq_is_enabled(arch_flags_t flags) {
     return (flags & 0x80) == 0; /* IF bit in DAIF is bit 7 (I), 1=masked */
 }
+#include <arch/psci.h>
+
 static inline void arch_reboot(void)
 {
-    /* TODO: PSCI reset */
+    psci_system_reset();
     for (;;) {
         arch_halt();
     }
+}
+
+static inline void arch_shutdown(void)
+{
+    psci_system_off();
+    for (;;) {
+        arch_halt();
+    }
+}
+
+static inline void arch_icode_sync(void *addr, size_t len)
+{
+    uintptr_t start = (uintptr_t)addr;
+    uintptr_t end = start + len;
+    /* Clean D-cache and Invalidate I-cache */
+    /* Assume min cache line 64 bytes */
+    start &= ~63ULL;
+    for (uintptr_t p = start; p < end; p += 64) {
+        __asm__ volatile("dc cvau, %0" : : "r"(p) : "memory");
+        __asm__ volatile("ic ivau, %0" : : "r"(p) : "memory");
+    }
+    __asm__ volatile("dsb ish");
+    __asm__ volatile("isb");
 }

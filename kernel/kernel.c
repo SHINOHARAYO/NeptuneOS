@@ -17,6 +17,9 @@
 #include "kernel/terminal.h"
 #include "kernel/user.h"
 #include <arch/processor.h>
+#include <stddef.h>
+
+extern void *memset(void *s, int c, size_t n);
 
 #define VGA_PHYS 0xB8000ULL
 #define VGA_HIGHER_HALF (HIGHER_HALF_BASE + VGA_PHYS)
@@ -119,6 +122,17 @@ static void idle_thread(void *arg)
 
 void kernel_main(uint64_t magic, uint64_t multiboot_info)
 {
+    /* Debug: Entered C */
+    *(volatile char *)0x09000000 = 'C';
+    *(volatile char *)0x09000000 = '\n';
+    /* Clear BSS manually (avoiding asm issues) */
+    {
+        extern char _bss_start[], _bss_end[];
+        uint64_t bss_size = (uint64_t)_bss_end - (uint64_t)_bss_start;
+        memset(_bss_start, 0, bss_size);
+    }
+    /* Debug: Done Memset - REMOVED */
+
     if ((uint32_t)magic != MULTIBOOT2_MAGIC) {
         panic("Invalid multiboot2 magic", magic);
     }
@@ -140,6 +154,7 @@ void kernel_main(uint64_t magic, uint64_t multiboot_info)
     console_clear(theme.default_color); /* ensure whole screen uses new colors */
     log_set_level(LOG_LEVEL_INFO);
     log_info("Booting 64-bit kernel...");
+    /* Debug: Entered Log - REMOVED */
     log_debug("Multiboot info validated.");
     log_debug_hex("Multiboot2 info size", multiboot_size);
     log_debug_hex("Multiboot2 info phys", multiboot_info_phys);
@@ -147,16 +162,20 @@ void kernel_main(uint64_t magic, uint64_t multiboot_info)
     log_info("Initializing IDT (early)...");
     idt_init();
     log_info("IDT initialized.");
+    /* Debug: Post-IDT - REMOVED */
 
     log_info("Initializing physical memory manager...");
     mem_init(multiboot_info_phys);
     log_info("Physical memory manager initialized.");
+    /* Debug: Post-MemInit - REMOVED */
+
     uint64_t max_phys = pmm_max_phys_addr();
     log_info_hex("Maximum managed physical address", max_phys);
 
     log_info("Extending higher-half direct map...");
     mmu_map_hhdm_2m(0, max_phys);
     log_info("Higher-half direct map updated.");
+    /* Debug: Post-HHDM - REMOVED */
     #if ENABLE_SECTION_PROTECT
     log_info("Applying kernel section protections...");
     mmu_protect_kernel_sections();

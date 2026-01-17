@@ -1,7 +1,9 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 typedef uint64_t arch_flags_t;
 
@@ -79,5 +81,21 @@ static inline void arch_reboot(void)
     } __attribute__((packed)) idt = {0, 0};
     __asm__ volatile("lidt %0" : : "m"(idt));
     __asm__ volatile("int3");
+}
+
+static inline void arch_shutdown(void)
+{
+    /* QEMU shutdown hack for x86 (ACPI S5 style via qemu specific port) */
+    outw(0x604, 0x2000);
+    for (;;) {
+        arch_halt();
+    }
+}
+
+static inline void arch_icode_sync(void *addr, size_t len)
+{
+    (void)addr;
+    (void)len;
+    /* x86 is coherent */
 }
 

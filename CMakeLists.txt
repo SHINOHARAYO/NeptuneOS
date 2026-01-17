@@ -73,6 +73,7 @@ set(KERNEL_SOURCES_AARCH64
     kernel/arch/aarch64/trampolines.s
     kernel/arch/aarch64/mmu.c
     kernel/arch/aarch64/fdt.c
+    kernel/arch/aarch64/psci.c
 )
 
 if(ARCH STREQUAL "x86_64")

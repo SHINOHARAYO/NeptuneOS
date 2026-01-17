@@ -24,9 +24,9 @@ vector_table:
     .align 7
 
     /* Lower EL using AArch64 */
-    b . /* Synchronous */
+    b sync_handler /* Synchronous */
     .align 7
-    b . /* IRQ */
+    b irq_handler  /* IRQ */
     .align 7
     b . /* FIQ */
     .align 7

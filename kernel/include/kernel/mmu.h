@@ -12,6 +12,7 @@
 #define MMU_FLAG_NOEXEC (1ULL << 63)
 #define MMU_FLAG_GLOBAL (1ULL << 8)
 #define MMU_FLAG_COW (1ULL << 9)
+#define MMU_FLAG_DEVICE (1ULL << 10)
 
 #define MMU_FAULT_PROTECT 0x1
 #define MMU_FAULT_WRITE   0x2

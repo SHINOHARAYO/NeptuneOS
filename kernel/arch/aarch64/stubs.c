@@ -31,12 +31,7 @@ void pci_dump(void) {}
 void acpi_init(void) {}
 void acpi_dump(void) {}
 
-/* MMU stubs */
-void mmu_map_hhdm_2m(uint64_t phys_start, uint64_t phys_end) { (void)phys_start; (void)phys_end; }
-void mmu_map_page(uint64_t virt, uint64_t phys, uint64_t flags) { (void)virt; (void)phys; (void)flags; }
-void mmu_unmap_page(uint64_t virt) { (void)virt; }
 
-void mmu_protect_kernel_sections(void) {}
 
 
 /* Memset stub */

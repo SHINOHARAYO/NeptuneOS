@@ -28,8 +28,8 @@ void cpu_init(void)
        Actually, `sched.c` should update `cpu_data->kernel_stack` when switching threads.
        For now, let's give it a safe stack.
     */
-    uint8_t *stack = (uint8_t *)kalloc_zero(16384, 16);
-    bsp_cpu_data->kernel_stack = (uint64_t)(stack + 16384);
+    uint8_t *stack = (uint8_t *)kalloc_zero(65536, 16);
+    bsp_cpu_data->kernel_stack = (uint64_t)(stack + 65536);
     bsp_cpu_data->cpu_id = 0;
 
     /* Set GS Base MSRs */
@@ -37,7 +37,7 @@ void cpu_init(void)
     arch_wrmsr(MSR_GS_BASE, (uint64_t)bsp_cpu_data);
     
     /* When in user, swapgs will load this value: */
-    arch_wrmsr(MSR_KERNEL_GS_BASE, (uint64_t)bsp_cpu_data);
+    arch_wrmsr(MSR_KERNEL_GS_BASE, 0);
     
     /* NOTE: We are currently in kernel. So GS should be valid.
        However, we haven't enabled FS/GS segments in GDT usually. 

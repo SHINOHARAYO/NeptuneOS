@@ -25,6 +25,7 @@ struct user_launch {
     char env_storage[USER_ENV_MAX][USER_STR_MAX];
     const char *argv[USER_ARG_MAX + 1];
     const char *envp[USER_ENV_MAX + 1];
+    int override_fds[3];
 };
 
 int user_space_init(struct user_space *space);

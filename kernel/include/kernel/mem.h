@@ -10,3 +10,4 @@ uint64_t pmm_alloc_pages(size_t n);
 uint64_t pmm_total_bytes(void);
 uint64_t pmm_used_bytes(void);
 uint64_t pmm_max_phys_addr(void);
+void pmm_add_region(uint64_t start, uint64_t end);

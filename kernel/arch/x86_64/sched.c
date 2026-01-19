@@ -8,7 +8,7 @@ void arch_thread_setup(struct thread *thread, void (*trampoline)(void))
     if (!thread || !thread->stack) return;
 
     /* Align stack to 16 bytes and leave space for initial frame */
-    uint64_t stack_top = (uint64_t)thread->stack + 16384; // STACK_SIZE assumption from sched.c
+    uint64_t stack_top = (uint64_t)thread->stack + STACK_SIZE;
     stack_top = (stack_top & ~0xFULL) - 8;
     *(uint64_t *)stack_top = 0; /* Dummy return address for alignment */
     
@@ -51,6 +51,7 @@ void arch_enter_user(uint64_t entry, uint64_t user_stack, uint64_t pml4_phys)
     }
 
     __asm__ volatile(
+        "swapgs\n"
         "pushq %[user_ss]\n"
         "pushq %[user_rsp]\n"
         "pushfq\n"

@@ -1,6 +1,6 @@
 # NeptuneOS
 
-NeptuneOS is a hobby kernel supporting x86_64 and AArch64. It features a higher-half design, Multiboot2 support, and a basic POSIX-like syscall ABI.
+NeptuneOS is a hobby kernel supporting x86_64. It features a higher-half design, Multiboot2 support, and a basic POSIX-like syscall ABI.
 
 ## Features
 
@@ -21,21 +21,10 @@ NeptuneOS is a hobby kernel supporting x86_64 and AArch64. It features a higher-
     - VGA/Serial output.
     - PMM, Heap, Scheduler fully integrated.
 
-#### AArch64 (ARM64)
-- **Status**: Unstable!!!!!!
-- **Features**:
-    - **Higher Half**: Kernel runs in high virtual address space (`0xFFFFFFFF80...`).
-    - **User Mode**: Ring 3 (EL0) support with `svc` interface.
-    - **Interrupts**: GICv2 driver (Distributor/CPU Interface).
-    - **Timer**: ARM Generic Timer (EL1 Physical Timer).
-    - **Console**: PL011 UART interactive shell.
-    - **Power**: PSCI Shutdown and Reboot support.
-
 ## Prerequisites
 
 - CMake 3.16+
 - **x86_64**: `gcc`, `grub-mkrescue`, `qemu-system-x86_64`
-- **AArch64**: `gcc-aarch64-linux-gnu`, `qemu-system-aarch64`
 
 ## Getting Started
 
@@ -44,9 +33,6 @@ NeptuneOS is a hobby kernel supporting x86_64 and AArch64. It features a higher-
 ```sh
 # x86_64
 cmake -S . -B build && cmake --build build
-
-# AArch64
-cmake -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-aarch64.cmake -DARCH=aarch64 -S . -B build-arm && cmake --build build-arm
 ```
 
 ### Running in QEMU
@@ -54,9 +40,6 @@ cmake -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-aarch64.cmake -DARCH=aarch64 -S . -
 ```sh
 # x86_64 (VGA + Serial)
 cmake --build build --target run
-
-# AArch64 (Serial)
-cmake --build build-arm --target run-arm64
 ```
 
 ## Project Layout
@@ -64,7 +47,6 @@ cmake --build build-arm --target run-arm64
 - `kernel/`
     - `arch/`: Architecture-specific implementations (HAL).
         - `x86_64`: GDT, IDT, Paging, Syscalls.
-        - `aarch64`: Boot stubs, GIC, Timer, Vectors.
     - `include/`: Kernel headers.
     - `mem.c`, `heap.c`: Memory management.
     - `sched.c`: Scheduler core.

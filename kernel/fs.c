@@ -1,4 +1,5 @@
 #include "kernel/fs.h"
+#include "kernel/log.h"
 
 #include <stddef.h>
 

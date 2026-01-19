@@ -36,6 +36,8 @@ set(KERNEL_SOURCES_COMMON
     kernel/syscall.c
     kernel/elf.c
     kernel/kernel.c
+    kernel/string.c
+    kernel/pipe.c
 )
 
 set(KERNEL_SOURCES_X86_64
@@ -57,34 +59,18 @@ set(KERNEL_SOURCES_X86_64
     kernel/pci.c
     kernel/acpi.c
     kernel/ata.c
+    kernel/arch/x86_64/console.c
+    kernel/arch/x86_64/hal.c
     kernel/console.c
 )
 
-set(KERNEL_SOURCES_AARCH64
-    kernel/arch/aarch64/start.s
-    kernel/arch/aarch64/vectors.s
-    kernel/arch/aarch64/sched.c
-    kernel/arch/aarch64/switch.s
-    kernel/arch/aarch64/serial.c
-    kernel/arch/aarch64/stubs.c
-    kernel/arch/aarch64/vectors.c
-    kernel/arch/aarch64/gic.c
-    kernel/arch/aarch64/timer.c
-    kernel/arch/aarch64/trampolines.s
-    kernel/arch/aarch64/mmu.c
-    kernel/arch/aarch64/fdt.c
-    kernel/arch/aarch64/psci.c
-    kernel/arch/aarch64/virtio.c
-)
+
 
 if(ARCH STREQUAL "x86_64")
     set(KERNEL_SOURCES ${KERNEL_SOURCES_COMMON} ${KERNEL_SOURCES_X86_64})
     set(LINKER_SCRIPT "${CMAKE_SOURCE_DIR}/linker.ld")
     set(ARCH_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/kernel/arch/x86_64/include")
-elseif(ARCH STREQUAL "aarch64")
-    set(KERNEL_SOURCES ${KERNEL_SOURCES_COMMON} ${KERNEL_SOURCES_AARCH64})
-    set(LINKER_SCRIPT "${CMAKE_SOURCE_DIR}/kernel/arch/aarch64/linker.ld")
-    set(ARCH_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/kernel/arch/aarch64/include")
+
 else()
     message(FATAL_ERROR "Unsupported architecture: ${ARCH}")
 endif()
@@ -117,17 +103,7 @@ if(ARCH STREQUAL "x86_64")
         -mcmodel=kernel
         -Wall -Wextra -Wpedantic
     )
-elseif(ARCH STREQUAL "aarch64")
-    target_compile_options(kernel-${ARCH} PRIVATE
-        -ffreestanding
-        -nostdlib
-        -fno-stack-protector
-        -fno-pic
-        -mgeneral-regs-only
-        -mstrict-align
-        -mno-outline-atomics
-        -Wall -Wextra -Werror
-    )
+
 endif()
 
 target_link_options(kernel-${ARCH} PRIVATE
@@ -167,17 +143,7 @@ add_custom_target(run-headless
     USES_TERMINAL
 )
 
-add_custom_target(run-arm64
-    COMMAND qemu-system-aarch64 -M virt -cpu cortex-a57 -kernel $<TARGET_FILE:kernel-${ARCH}> -serial stdio -m 4G -no-reboot -no-shutdown -drive file=${CMAKE_SOURCE_DIR}/disk.img,format=raw,if=none,id=drive0 -device virtio-blk-device,drive=drive0
-    DEPENDS kernel-${ARCH}
-    USES_TERMINAL
-)
 
-add_custom_target(run-arm64-headless
-    COMMAND qemu-system-aarch64 -M virt -cpu cortex-a57 -kernel $<TARGET_FILE:kernel-${ARCH}> -nographic -m 4G -no-reboot -no-shutdown -drive file=${CMAKE_SOURCE_DIR}/disk.img,format=raw,if=none,id=drive0 -device virtio-blk-device,drive=drive0
-    DEPENDS kernel-${ARCH}
-    USES_TERMINAL
-)
 
 add_custom_target(regression
     COMMAND ${CMAKE_COMMAND} -E env BUILD_DIR=${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/scripts/regression.sh
@@ -193,6 +159,7 @@ add_custom_target(fuzz
 
 # Deep clean: Remove the entire build directories
 add_custom_target(distclean
-    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_SOURCE_DIR}/build-x86_64 ${CMAKE_SOURCE_DIR}/build-aarch64
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_SOURCE_DIR}/build-x86_64
+
     COMMENT "Removing 'build' and 'build-arm' directories"
 )

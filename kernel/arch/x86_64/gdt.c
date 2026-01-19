@@ -52,8 +52,8 @@ void gdt_relocate_heap(void)
     new_table[0] = 0x0000000000000000ULL;         /* null */
     new_table[1] = 0x00af9a000000ffffULL;         /* code */
     new_table[2] = 0x00af92000000ffffULL;         /* data */
-    new_table[3] = 0x00affa000000ffffULL;         /* user code */
-    new_table[4] = 0x00aff2000000ffffULL;         /* user data */
+    new_table[3] = 0x00aff2000000ffffULL;         /* user data (0x18) for sysret SS */
+    new_table[4] = 0x00affa000000ffffULL;         /* user code (0x20) for sysret CS */
 
     /* Set up TSS for kernel stack */
     uint64_t stack_ptr;

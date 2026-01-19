@@ -21,46 +21,16 @@
 
 extern void *memset(void *s, int c, size_t n);
 
-#define VGA_PHYS 0xB8000ULL
-#define VGA_HIGHER_HALF (HIGHER_HALF_BASE + VGA_PHYS)
-#define MULTIBOOT2_MAGIC 0x36D76289U
-
-#ifdef __x86_64__
 #define ENABLE_NX_TEST 1
 #define ENABLE_TEXT_WP_TEST 1
 #define ENABLE_SECTION_PROTECT 1
-#else
-#define ENABLE_NX_TEST 0
-#define ENABLE_TEXT_WP_TEST 0
-#define ENABLE_SECTION_PROTECT 0
-#endif
 
 #define ENABLE_USER_SMOKE 1
 #define ENABLE_KERNEL_TERMINAL 0
 
-#ifdef __aarch64__
-extern uint64_t boot_pml4[];
-#define pml4_table boot_pml4
-#else
-extern uint64_t pml4_table[];
-#endif
+#include "kernel/hal.h"
 
-#define ENABLE_FAULT_TEST 0
-
-static inline void drop_identity_map(void)
-{
-#ifdef __x86_64__
-    uint64_t phys_pml4 = (uint64_t)pml4_table;
-    uint64_t *pml4_high = (uint64_t *)phys_to_higher_half(phys_pml4);
-    pml4_high[0] = 0;
-    __asm__ volatile("mov %0, %%cr3" : : "r"(phys_pml4) : "memory");
-#else
-    /* extern uint64_t boot_pml4[]; */
-    /* boot_pml4[0] = 0; */
-    /* arch_mmu_flush_tlb(); */
-    (void)boot_pml4;
-#endif
-}
+/* drop_identity_map moved to hal.c */
 
 static inline void enable_write_protect(void)
 {
@@ -142,9 +112,14 @@ void kernel_main(uint64_t magic, uint64_t multiboot_info)
     }
     /* Debug: Done Memset - REMOVED */
 
-    if ((uint32_t)magic != MULTIBOOT2_MAGIC) {
-        panic("Invalid multiboot2 magic", magic);
+
+    /* Clear BSS manually (avoiding asm issues) */
+    {
+        extern char _bss_start[], _bss_end[];
+        uint64_t bss_size = (uint64_t)_bss_end - (uint64_t)_bss_start;
+        memset(_bss_start, 0, bss_size);
     }
+    /* Debug: Done Memset - REMOVED */
 
     const uint64_t multiboot_info_phys = multiboot_info;
     volatile uint32_t multiboot_size = *(volatile uint32_t *)multiboot_info_phys; /* identity-mapped early */
@@ -195,23 +170,12 @@ void kernel_main(uint64_t magic, uint64_t multiboot_info)
     #else
     log_info("Kernel section protections skipped (disabled).");
     #endif
-    /*
-    #ifndef __aarch64__
-    log_info("Protecting VGA mapping (RW/NX)...");
-    mmu_map_page(VGA_HIGHER_HALF, VGA_PHYS, MMU_FLAG_WRITE | MMU_FLAG_GLOBAL | MMU_FLAG_NOEXEC);
-    log_info("VGA mapping protected.");
-    #endif
-    */
     log_info("Initializing kernel heap...");
     kheap_init();
     log_info("Kernel heap initialized.");
     block_init();
-    #ifdef __aarch64__
-    {
-        extern void virtio_init(void);
-        virtio_init();
-    }
-    #endif
+    /* arch_init_platform should handle virtio etc if needed, or we rely on PCI */
+    /* for now PCI handles virtio-blk on x86, on ARM64 it was manual MMIO */
     log_info("Block devices initialized.");
     /* struct block_device *block = block_get_default(); */
     /*
@@ -341,7 +305,7 @@ wp_resume:
     #endif
 
     log_info("Dropping identity map; switching to higher-half only.");
-    drop_identity_map();
+    arch_drop_identity_map();
     log_info("Dropped identity map; higher-half only.");
 
     trigger_page_fault_test();

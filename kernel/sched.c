@@ -5,6 +5,7 @@
 #include "kernel/mmu.h"
 #include "kernel/spinlock.h"
 #include "kernel/heap.h"
+#include "kernel/syscall.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -129,6 +130,16 @@ int sched_create(void (*entry)(void *), void *arg)
     thread->exit_code = 0;
     thread->is_user = 0;
     thread->reaped = 1;
+    
+    /* Default CWD to root */
+    thread->cwd[0] = '/';
+    thread->cwd[1] = '\0';
+    
+    /* Default FDs: 0,1,2 -> Global TTY slots (0,1,2). Others -1 */
+    thread->fds[0] = 0; syscall_acquire_handle(0);
+    thread->fds[1] = 1; syscall_acquire_handle(1);
+    thread->fds[2] = 2; syscall_acquire_handle(2);
+    for (int i=3; i<16; ++i) thread->fds[i] = -1;
 
     thread->stack = (uint8_t *)kalloc_zero(STACK_SIZE, 16);
     if (!thread->stack) {
@@ -167,7 +178,39 @@ int sched_create_user(void (*entry)(void *), void *arg, int parent_pid, int *out
     thread->ppid = parent_pid;
     thread->exit_code = 0;
     thread->is_user = 1;
+    thread->is_user = 1;
     thread->reaped = 0;
+
+    /* Inherit CWD from parent if possible, otherwise root */
+    struct thread *parent = NULL;
+    if (parent_pid > 0) {
+        struct thread *t = threads_head;
+        while (t) {
+            if (t->pid == parent_pid) {
+                parent = t;
+                break;
+            }
+            t = t->next;
+        }
+    }
+    if (parent) {
+        for (int i = 0; i < 256; ++i) {
+            thread->cwd[i] = parent->cwd[i];
+        }
+        for (int i = 0; i < 16; ++i) {
+            thread->fds[i] = parent->fds[i];
+            if (thread->fds[i] >= 0) {
+                syscall_acquire_handle(thread->fds[i]);
+            }
+        }
+    } else {
+        thread->cwd[0] = '/';
+        thread->cwd[1] = '\0';
+        thread->fds[0] = 0; syscall_acquire_handle(0);
+        thread->fds[1] = 1; syscall_acquire_handle(1);
+        thread->fds[2] = 2; syscall_acquire_handle(2);
+        for (int i=3; i<16; ++i) thread->fds[i] = -1;
+    }
 
     thread->stack = (uint8_t *)kalloc_zero(STACK_SIZE, 16);
     if (!thread->stack) {
@@ -265,6 +308,13 @@ static void sched_exit(void)
     spinlock_acquire_irqsave(&sched_lock);
     if (current_thread) {
         current_thread->state = THREAD_DEAD;
+        /* Release held handles */
+        for (int i = 0; i < 16; ++i) {
+            if (current_thread->fds[i] >= 0) {
+                syscall_release_handle(current_thread->fds[i]);
+                current_thread->fds[i] = -1;
+            }
+        }
     }
     sched_resched_locked();
     /* Should not return if we successfully switched away from a DEAD thread */
@@ -320,11 +370,98 @@ int sched_current_pid(void)
     return current_thread->pid;
 }
 
+int sched_get_ppid(int pid)
+{
+    if (pid <= 0) return 0;
+    spinlock_acquire_irqsave(&sched_lock);
+    struct thread *t = threads_head;
+    int ppid = 0;
+    while (t) {
+        if (t->pid == pid) {
+            ppid = t->ppid;
+            break;
+        }
+        t = t->next;
+    }
+    spinlock_release_irqrestore(&sched_lock);
+    return ppid;
+}
+
 void sched_set_current_exit_code(int code)
 {
     if (current_thread) {
         current_thread->exit_code = code;
     }
+}
+
+void sched_get_cwd(char *buf, size_t size)
+{
+    if (!buf || size == 0) return;
+    spinlock_acquire_irqsave(&sched_lock);
+    if (current_thread) {
+        size_t i;
+        for (i = 0; i < size - 1 && current_thread->cwd[i]; ++i) {
+            buf[i] = current_thread->cwd[i];
+        }
+        buf[i] = '\0';
+    } else {
+        buf[0] = '/';
+        buf[1] = '\0';
+    }
+    spinlock_release_irqrestore(&sched_lock);
+}
+
+void sched_set_cwd(const char *buf)
+{
+    if (!buf) return;
+    spinlock_acquire_irqsave(&sched_lock);
+    if (current_thread) {
+        size_t i;
+        for (i = 0; i < 255 && buf[i]; ++i) {
+            current_thread->cwd[i] = buf[i];
+        }
+        current_thread->cwd[i] = '\0';
+    }
+    spinlock_release_irqrestore(&sched_lock);
+}
+
+int sched_get_fd(int fd)
+{
+    if (fd < 0 || fd >= 16) return -1;
+    int global_handle = -1;
+    spinlock_acquire_irqsave(&sched_lock);
+    if (current_thread) {
+        global_handle = current_thread->fds[fd];
+    }
+    spinlock_release_irqrestore(&sched_lock);
+    return global_handle;
+}
+
+void sched_set_fd(int fd, int global_handle)
+{
+    if (fd < 0 || fd >= 16) return;
+    spinlock_acquire_irqsave(&sched_lock);
+    if (current_thread) {
+        current_thread->fds[fd] = global_handle;
+    }
+    spinlock_release_irqrestore(&sched_lock);
+}
+
+int sched_allocate_fd(int global_handle)
+{
+    if (global_handle < 0) return -1;
+    spinlock_acquire_irqsave(&sched_lock);
+    if (current_thread) {
+        for (int i = 0; i < 16; ++i) {
+            if (current_thread->fds[i] == -1) {
+                current_thread->fds[i] = global_handle;
+                spinlock_release_irqrestore(&sched_lock);
+                return i;
+            }
+        }
+    }
+    spinlock_release_irqrestore(&sched_lock);
+    return -1;
 }
 
 int sched_wait_child(int parent_pid, int *out_code)

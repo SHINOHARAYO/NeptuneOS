@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include <arch/context.h>
+#include <stddef.h>
 
 struct interrupt_frame;
 
@@ -21,8 +22,15 @@ void sched_set_current_exit_to_kernel(int enable);
 int sched_current_exit_to_kernel(void);
 void sched_kill_user_threads(void);
 uint64_t sched_current_aspace(void);
+uint64_t sched_current_aspace(void);
 int sched_current_pid(void);
+int sched_get_ppid(int pid);
 void sched_set_current_exit_code(int code);
+void sched_get_cwd(char *buf, size_t size);
+void sched_set_cwd(const char *buf);
+int sched_get_fd(int fd);
+void sched_set_fd(int fd, int global_handle);
+int sched_allocate_fd(int global_handle);
 
 /* Wait queue support */
 enum thread_state {
@@ -49,6 +57,8 @@ struct thread {
     int exit_code;
     uint8_t is_user;
     uint8_t reaped;
+    char cwd[256];
+    int fds[16];
 };
 typedef struct wait_queue {
     struct thread *head;
@@ -67,4 +77,4 @@ void arch_thread_setup(struct thread *thread, void (*trampoline)(void));
 void arch_thread_switch(struct thread *next);
 void arch_enter_user(uint64_t entry, uint64_t stack, uint64_t pml4_phys);
 
-#define STACK_SIZE 16384
+#define STACK_SIZE 65536

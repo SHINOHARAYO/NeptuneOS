@@ -14,13 +14,21 @@ static struct log_colors current_colors = {
 };
 
 /* On AArch64, console writes to serial, so we skip explicit serial writes to avoid duplication. */
-#ifdef __aarch64__
-#define raw_serial_write(x) ((void)0)
-#define raw_serial_write_hex(x) ((void)0)
-#else
-#define raw_serial_write(x) serial_write(x)
-#define raw_serial_write_hex(x) serial_write_hex(x)
-#endif
+/* On AArch64, console writes to serial, so we skip explicit serial writes to avoid duplication. */
+/* We delegate this decision to HAL */
+#include "kernel/hal.h"
+
+static void raw_serial_write(const char *msg) {
+    if (arch_log_should_mirror_to_serial()) {
+        serial_write(msg);
+    }
+}
+
+static void raw_serial_write_hex(uint64_t v) {
+    if (arch_log_should_mirror_to_serial()) {
+        serial_write_hex(v);
+    }
+}
 
 static void write_prefix(enum log_level level)
 {

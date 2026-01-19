@@ -13,10 +13,18 @@ enum vfs_backend {
     VFS_BACKEND_RAMFS,
     VFS_BACKEND_LIST,
     VFS_BACKEND_FAT,
+    VFS_BACKEND_PIPE,
 };
 
 #define VFS_LIST_PATH_MAX 64
 #define VFS_PATH_MAX 128
+
+// Internal pipe definition from pipe.c
+struct pipe;
+extern struct pipe *pipe_alloc_struct(void);
+extern int64_t pipe_read_impl(struct pipe *p, void *buf, uint64_t len);
+extern int64_t pipe_write_impl(struct pipe *p, const void *buf, uint64_t len);
+extern void pipe_close_impl(struct pipe *p, int is_writer);
 
 struct vfs_file {
     enum vfs_backend backend;
@@ -24,7 +32,10 @@ struct vfs_file {
     const struct memfs_file *mem;
     struct ramfs_file *ram;
     struct fat_file *fat;
+    struct pipe *pipe; /* For pipe backend */
+    int is_pipe_writer; /* To track close */
     char list_path[VFS_LIST_PATH_MAX];
+    int refcount;
 };
 
 static int starts_with(const char *s, const char *prefix)
@@ -144,7 +155,38 @@ static struct vfs_file *vfs_alloc(enum vfs_backend backend)
     file->ram = NULL;
     file->fat = NULL;
     file->list_path[0] = '\0';
+    file->list_path[0] = '\0';
+    file->refcount = 1;
     return file;
+}
+
+int pipe_create(struct vfs_file **reader, struct vfs_file **writer)
+{
+    if (!reader || !writer) return -1;
+    
+    struct pipe *p = pipe_alloc_struct();
+    if (!p) return SYSCALL_ENOMEM;
+    
+    struct vfs_file *r = vfs_alloc(VFS_BACKEND_PIPE);
+    struct vfs_file *w = vfs_alloc(VFS_BACKEND_PIPE);
+    
+    if (!r || !w) {
+        /* cleanup */
+        if (r) kfree(r);
+        if (w) kfree(w);
+        kfree(p); /* assumes pipe_alloc returns fresh alloc with no refs */
+        return SYSCALL_ENOMEM;
+    }
+    
+    r->pipe = p;
+    r->is_pipe_writer = 0;
+    
+    w->pipe = p;
+    w->is_pipe_writer = 1;
+    
+    *reader = r;
+    *writer = w;
+    return 0;
 }
 
 int vfs_open(const char *path, struct vfs_file **out)
@@ -273,8 +315,8 @@ int64_t vfs_read(struct vfs_file *file, void *buf, uint64_t len)
             total += fat_list_dir(fat_path, listing + total, sizeof(listing) - total);
         } else {
             total += memfs_list(listing + total, sizeof(listing) - total);
-            total += ramfs_list(listing + total, sizeof(listing) - total);
-            total += fat_list(listing + total, sizeof(listing) - total);
+            // total += ramfs_list(listing + total, sizeof(listing) - total);
+            // total += fat_list(listing + total, sizeof(listing) - total);
         }
         if (file->offset >= total) {
             return 0;
@@ -296,6 +338,9 @@ int64_t vfs_read(struct vfs_file *file, void *buf, uint64_t len)
             return -SYSCALL_EIO;
         }
         return read;
+    }
+    if (file->backend == VFS_BACKEND_PIPE) {
+        return pipe_read_impl(file->pipe, buf, len);
     }
     return -SYSCALL_EBADF;
 }
@@ -321,6 +366,9 @@ int64_t vfs_write(struct vfs_file *file, const void *buf, uint64_t len)
         }
         return wrote;
     }
+    if (file->backend == VFS_BACKEND_PIPE) {
+        return pipe_write_impl(file->pipe, buf, len);
+    }
     return -SYSCALL_EBADF;
 }
 
@@ -329,8 +377,22 @@ void vfs_close(struct vfs_file *file)
     if (!file) {
         return;
     }
+    if (file->refcount > 1) {
+        file->refcount--;
+        return;
+    }
     if (file->backend == VFS_BACKEND_FAT && file->fat) {
         kfree(file->fat);
     }
+    if (file->backend == VFS_BACKEND_PIPE && file->pipe) {
+        pipe_close_impl(file->pipe, file->is_pipe_writer);
+    }
     kfree(file);
+}
+
+struct vfs_file *vfs_dup(struct vfs_file *file)
+{
+    if (!file) return NULL;
+    file->refcount++;
+    return file;
 }

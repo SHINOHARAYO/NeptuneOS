@@ -12,6 +12,8 @@ void _start(void)
 
     write_str("Neptune init\n");
 
+    write_str("Neptune init: spawning /bin/shell...\n");
+
     for (;;) {
         long pid = sys_spawn("/bin/shell", argv, envp);
         if (pid < 0) {
@@ -20,11 +22,7 @@ void _start(void)
             continue;
         }
         int status = 0;
-        long reap = sys_wait(&status);
-        if (reap < 0) {
-            write_str("init: wait failed\n");
-        } else {
-            write_str("init: shell exited\n");
-        }
+        sys_wait(&status);
+        write_str("init: shell exited\n");
     }
 }

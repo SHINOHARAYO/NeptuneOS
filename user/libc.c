@@ -1,4 +1,5 @@
 #include "libc.h"
+#include "syscall.h"
 
 size_t strlen(const char *s)
 {
@@ -57,4 +58,29 @@ void *memset(void *dst, int value, size_t len)
         d[i] = (unsigned char)value;
     }
     return dst;
+}
+
+int sys_dup2(int oldfd, int newfd)
+{
+    return (int)syscall2(SYSCALL_DUP2, (uint64_t)oldfd, (uint64_t)newfd);
+}
+
+int sys_pipe(int pipefd[2])
+{
+    return (int)syscall1(SYSCALL_PIPE, (uint64_t)pipefd);
+}
+
+int sys_spawn2(const char *path, const char *const *argv, const char *const *envp, const int *fd_map)
+{
+    return (int)sys_spawn2_inline(path, argv, envp, fd_map);
+}
+
+int sys_chdir(const char *path)
+{
+    return (int)syscall1(SYSCALL_CHDIR, (uint64_t)path);
+}
+
+int sys_getcwd(char *buf, size_t size)
+{
+    return (int)syscall2(SYSCALL_GETCWD, (uint64_t)buf, size);
 }

@@ -8,11 +8,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-#ifdef __aarch64__
-#define HEAP_BASE 0x42000000ULL
-#else
 #define HEAP_BASE 0xFFFF900000000000ULL
-#endif
 #define HEAP_FLAGS (MMU_FLAG_WRITE | MMU_FLAG_GLOBAL | MMU_FLAG_NOEXEC)
 
 struct alloc_hdr {

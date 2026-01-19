@@ -292,17 +292,21 @@ uint64_t syscall_handle(struct syscall_regs *regs, struct interrupt_frame *frame
         int fd = (int)regs->rdi;
         const char *buf = (const char *)regs->rsi;
         uint64_t len = regs->rdx;
+        log_info("sys_write called");   /* DEBUG */
         if (!buf || len == 0) {
             return 0;
         }
         if (!user_ptr_range((uint64_t)buf, len)) {
+            log_error("sys_write: invalid pointer"); /* DEBUG */
             return syscall_error(SYSCALL_EINVAL);
         }
         if (!handle_valid(fd)) {
+             log_error("sys_write: invalid handle"); /* DEBUG */
             return syscall_error(SYSCALL_EBADF);
         }
         struct handle *h = &handles[fd];
         if (h->type == HANDLE_TTY) {
+            log_info("sys_write: tty"); /* DEBUG */
             return tty_write(buf, len);
         }
         if (h->type == HANDLE_VFS) {

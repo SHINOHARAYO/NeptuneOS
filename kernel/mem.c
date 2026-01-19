@@ -432,6 +432,48 @@ uint64_t pmm_alloc_page(void)
     
     spinlock_release_irqrestore(&pmm_lock);
     panic("Out of physical memory", 0);
+    spinlock_release_irqrestore(&pmm_lock);
+    panic("Out of physical memory", 0);
+}
+
+uint64_t pmm_alloc_pages(size_t n)
+{
+    if (n == 0) return 0;
+    if (n == 1) return pmm_alloc_page();
+    
+    spinlock_acquire_irqsave(&pmm_lock);
+    
+    /* Naive search for n consecutive bits */
+    for (uint32_t i = 0; i < region_count; ++i) {
+        struct pmm_region *region = &regions[i];
+        if (region->total_pages <= region->reserved_pages + n) continue;
+        
+        uint64_t consecutive = 0;
+        uint64_t start_run = 0;
+        
+        for (uint64_t page = region->reserved_pages; page < region->total_pages; ++page) {
+            if (!test_bit(region, page)) {
+                if (consecutive == 0) start_run = page;
+                consecutive++;
+                if (consecutive == n) {
+                    /* Found it. Mark used. */
+                    for (uint64_t k = 0; k < n; ++k) {
+                        set_bit(region, start_run + k);
+                    }
+                    used_pages += n;
+                    spinlock_release_irqrestore(&pmm_lock);
+                    return region->phys_start + (start_run * 4096);
+                }
+            } else {
+                consecutive = 0;
+            }
+        }
+    }
+    
+    spinlock_release_irqrestore(&pmm_lock);
+    // don't panic, just return usually? But pmm_alloc_page panics.
+    // Consistent behavior:
+    panic("Out of contiguous physical memory", n);
 }
 
 void pmm_free_page(uint64_t addr)

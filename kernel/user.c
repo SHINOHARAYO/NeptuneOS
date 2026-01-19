@@ -230,30 +230,38 @@ int user_prepare_image(const char *path, const char *const *argv, const char *co
         return -1;
     }
 
+    log_info("user_prepare: starting");
+    
     if (user_space_init(space) != 0) {
         log_error("user_prepare: init failed");
         return -1;
     }
+    log_info("user_prepare: space inited");
 
     const struct memfs_file *image = memfs_lookup(path);
     if (!image) {
         log_error("user_prepare: image not found");
         return -1;
     }
+    log_info("user_prepare: image found");
+    
     if (elf_load_user(image->data, image->size, space) != 0) {
         log_error("user_prepare: ELF load failed");
         return -1;
     }
+    log_info("user_prepare: elf loaded");
 
     if (user_space_map_stack(space, 1) != 0) {
         log_error("user_prepare: map stack failed");
         return -1;
     }
+    log_info("user_prepare: stack mapped");
 
     if (user_stack_setup(space, argv, envp, out_sp) != 0) {
         log_error("user_prepare: stack setup failed");
         return -1;
     }
+    log_info("user_prepare: stack setup done");
 
     return 0;
 }
@@ -274,6 +282,9 @@ void user_smoke_thread(void *arg)
     }
 
     log_info("Entering user-mode init");
+    log_info_hex("Entry", space.entry);
+    log_info_hex("Stack", user_sp);
+    log_info_hex("PML4", space.pml4_phys);
     sched_set_current_aspace(space.pml4_phys);
     sched_set_current_exit_to_kernel(1);
     arch_enter_user(space.entry, user_sp, space.pml4_phys);

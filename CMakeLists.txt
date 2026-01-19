@@ -74,6 +74,7 @@ set(KERNEL_SOURCES_AARCH64
     kernel/arch/aarch64/mmu.c
     kernel/arch/aarch64/fdt.c
     kernel/arch/aarch64/psci.c
+    kernel/arch/aarch64/virtio.c
 )
 
 if(ARCH STREQUAL "x86_64")
@@ -167,13 +168,13 @@ add_custom_target(run-headless
 )
 
 add_custom_target(run-arm64
-    COMMAND qemu-system-aarch64 -M virt -cpu cortex-a57 -kernel $<TARGET_FILE:kernel-${ARCH}> -serial stdio -m 4G -no-reboot -no-shutdown
+    COMMAND qemu-system-aarch64 -M virt -cpu cortex-a57 -kernel $<TARGET_FILE:kernel-${ARCH}> -serial stdio -m 4G -no-reboot -no-shutdown -drive file=${CMAKE_SOURCE_DIR}/disk.img,format=raw,if=none,id=drive0 -device virtio-blk-device,drive=drive0
     DEPENDS kernel-${ARCH}
     USES_TERMINAL
 )
 
 add_custom_target(run-arm64-headless
-    COMMAND qemu-system-aarch64 -M virt -cpu cortex-a57 -kernel $<TARGET_FILE:kernel-${ARCH}> -nographic -m 4G -no-reboot -no-shutdown
+    COMMAND qemu-system-aarch64 -M virt -cpu cortex-a57 -kernel $<TARGET_FILE:kernel-${ARCH}> -nographic -m 4G -no-reboot -no-shutdown -drive file=${CMAKE_SOURCE_DIR}/disk.img,format=raw,if=none,id=drive0 -device virtio-blk-device,drive=drive0
     DEPENDS kernel-${ARCH}
     USES_TERMINAL
 )
@@ -192,6 +193,6 @@ add_custom_target(fuzz
 
 # Deep clean: Remove the entire build directories
 add_custom_target(distclean
-    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_SOURCE_DIR}/build ${CMAKE_SOURCE_DIR}/build-arm
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_SOURCE_DIR}/build-x86_64 ${CMAKE_SOURCE_DIR}/build-aarch64
     COMMENT "Removing 'build' and 'build-arm' directories"
 )

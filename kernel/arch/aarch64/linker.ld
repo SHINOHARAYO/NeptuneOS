@@ -6,16 +6,22 @@ SECTIONS
     _kernel_start = .;
     
     .text : AT(0x40080000) {
+        _text_start = .;
         KEEP(*(.text.boot))
         *(.text*)
+        _text_end = .;
     }
     
     .rodata : {
+        _rodata_start = .;
         *(.rodata*)
+        _rodata_end = .;
     }
     
     .data : {
+        _data_start = .;
         *(.data*)
+        _data_end = .;
     }
     
     .bss : { 

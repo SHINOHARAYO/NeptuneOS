@@ -23,6 +23,9 @@ void arm_sync_handler(struct syscall_regs *regs)
         struct interrupt_frame frame = {0}; /* Dummy */
         uint64_t ret = syscall_handle(regs, &frame);
         
+        /* Advance ELR to skip SVC instruction (4 bytes) */
+        regs->elr += 4;
+        
         /* Put return value in X0 */
         regs->rdi = ret; /* rdi aliases to x0 in our struct */
         return;

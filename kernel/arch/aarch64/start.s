@@ -224,5 +224,5 @@ boot_high_pdpt:
 page_tables_end:
 
 stack_bottom:
-.skip 16384
+.skip 65536
 stack_top:

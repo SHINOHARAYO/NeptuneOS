@@ -28,16 +28,22 @@ extern void *memset(void *s, int c, size_t n);
 #ifdef __x86_64__
 #define ENABLE_NX_TEST 1
 #define ENABLE_TEXT_WP_TEST 1
+#define ENABLE_SECTION_PROTECT 1
 #else
 #define ENABLE_NX_TEST 0
 #define ENABLE_TEXT_WP_TEST 0
+#define ENABLE_SECTION_PROTECT 0
 #endif
 
-#define ENABLE_SECTION_PROTECT 1
 #define ENABLE_USER_SMOKE 1
 #define ENABLE_KERNEL_TERMINAL 0
 
+#ifdef __aarch64__
+extern uint64_t boot_pml4[];
+#define pml4_table boot_pml4
+#else
 extern uint64_t pml4_table[];
+#endif
 
 #define ENABLE_FAULT_TEST 0
 
@@ -49,7 +55,10 @@ static inline void drop_identity_map(void)
     pml4_high[0] = 0;
     __asm__ volatile("mov %0, %%cr3" : : "r"(phys_pml4) : "memory");
 #else
-    /* TODO: ARM64 identity map drop */
+    /* extern uint64_t boot_pml4[]; */
+    /* boot_pml4[0] = 0; */
+    /* arch_mmu_flush_tlb(); */
+    (void)boot_pml4;
 #endif
 }
 
@@ -186,15 +195,26 @@ void kernel_main(uint64_t magic, uint64_t multiboot_info)
     #else
     log_info("Kernel section protections skipped (disabled).");
     #endif
+    /*
+    #ifndef __aarch64__
     log_info("Protecting VGA mapping (RW/NX)...");
     mmu_map_page(VGA_HIGHER_HALF, VGA_PHYS, MMU_FLAG_WRITE | MMU_FLAG_GLOBAL | MMU_FLAG_NOEXEC);
     log_info("VGA mapping protected.");
+    #endif
+    */
     log_info("Initializing kernel heap...");
     kheap_init();
     log_info("Kernel heap initialized.");
     block_init();
+    #ifdef __aarch64__
+    {
+        extern void virtio_init(void);
+        virtio_init();
+    }
+    #endif
     log_info("Block devices initialized.");
-    struct block_device *block = block_get_default();
+    /* struct block_device *block = block_get_default(); */
+    /*
     if (fat_init(block) == 0) {
         log_info("FAT16 volume mounted.");
     } else {
@@ -211,6 +231,7 @@ void kernel_main(uint64_t magic, uint64_t multiboot_info)
             log_warn("FAT16 volume not found.");
         }
     }
+    */
     kalloc_enable_frees();
     log_info("Kernel heap free tracking enabled.");
     heap_verify_checkpoint("Heap verified after heap init");

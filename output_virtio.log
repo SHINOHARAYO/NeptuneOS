@@ -1,0 +1,38 @@
+[  2%] Building C object CMakeFiles/kernel-aarch64.dir/kernel/arch/aarch64/virtio.c.obj
+[  5%] Linking C executable kernel.elf
+/usr/bin/aarch64-linux-gnu-ld: warning: kernel.elf has a LOAD segment with RWX permissions
+[100%] Built target kernel-aarch64
+C
+[INFO ] Booting 64-bit kernel...
+[INFO ] Initializing IDT (early)...
+[INFO ] IDT initialized.
+[INFO ] Initializing physical memory manager...
+[INFO ] Initializing AArch64 memory...
+[WARN ] FDT Address is 0. Skipping scan to avoid crash. Fallback enabled.
+[INFO ] FDT Address: 0x0000000000000000
+[WARN ] FDT Memory Detection Failed. Fallback to 4GB.
+PMM regions: 0x0000000000000001
+Total managed bytes: 0x00000000FFB24000
+PMM regions: 0x0000000000000001
+Total managed bytes: 0x00000000FFB24000
+Region 0x0000000000000000: 0x00000000404BC000 - 0x0000000140000000 pages=0x00000000000FFB24
+Region 0x0000000000000000: 0x00000000404BC000 - 0x0000000140000000 pages=0x00000000000FFB24
+[INFO ] Physical memory allocator ready.
+[INFO ] Physical memory manager initialized.
+[INFO ] Maximum managed physical address: 0x0000000140000000
+[INFO ] Extending higher-half direct map...
+[INFO ] Higher-half direct map updated.
+[INFO ] Applying kernel section protections...
+[INFO ] Kernel sections protected.
+[INFO ] Write-protect enabled.
+[INFO ] Protecting VGA mapping (RW/NX)...
+[INFO ] VGA mapping protected.
+[INFO ] Initializing kernel heap...
+[INFO ] Kernel heap initialized.
+[INFO ] VirtIO Block Device found at MMIO base: 0x000000000A003E00
+[INFO ] VirtIO Block Capacity (sectors): 0x0000000000020000
+[INFO ] Block devices initialized.
+qemu-system-aarch64: terminating on signal 15 from pid 45455 (/usr/bin/gmake)
+gmake[2]: *** [CMakeFiles/Makefile2:255: CMakeFiles/run-arm64-headless.dir/all] Terminated
+gmake[1]: *** [CMakeFiles/Makefile2:262: CMakeFiles/run-arm64-headless.dir/rule] Terminated
+gmake: *** [Makefile:189: run-arm64-headless] Terminated

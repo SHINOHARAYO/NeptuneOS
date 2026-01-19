@@ -2,279 +2,150 @@
 #include <kernel/log.h>
 #include <kernel/panic.h>
 #include <kernel/mem.h>
-#include <kernel/sched.h>
-#include <kernel/user.h>
-
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 /* Defined in start.s */
 extern uint64_t boot_pml4[];
 
-/* Also we need to know where page tables end to allocate new ones safely?
-   Or use pmm_alloc_page() for new tables?
-   pmm assumes heap/mem initialized.
-   Early mapping (before pmm) requires static allocator or careful ordering.
-   `mmu_map_hhdm_2m` is called BEFORE `kheap_init`, but AFTER `pmm_init`.
-   So `pmm_alloc_page` is available.
-*/
+#define PAGE_SIZE_2M (1ULL << 21)
+#define HHDM_PML4_INDEX ((ARCH_HHDM_BASE >> 39) & 0x1FF)
 
-/* Helper to get phys address of boot_pml4. 
-   Since kernel is mapped high, boot_pml4 is high.
-   We need its physical address to put in CR3 (TTBR).
-   But here we just want to EDIT it.
-   It's mapped in High Higher Half (Kernel).
-   So we can access it directly via pointer.
-*/
-
-/* Function definitions moved to end of file */
-
-/* AArch64 PTE Bits */
-#define PTE_VALID      (1ULL << 0)
-#define PTE_PAGE       (1ULL << 1)
-#define PTE_USER       (1ULL << 6) /* AP[1] = 1 (EL0/EL1) -> Actually AP is [7:6]. 01=RW/User. 11=RO/User. Bit 6 is set in both. */
-#define PTE_RO         (1ULL << 7) /* AP[2] = 1 (Read Only) */
-#define PTE_SH_INNER   (3ULL << 8)
-#define PTE_AF         (1ULL << 10)
-#define PTE_NX         (1ULL << 54) /* UXN */
-#define PTE_PXN        (1ULL << 53)
-
-/* Software bits: 55-58 are reserved for software use */
-#define PTE_COW        (1ULL << 55) 
-
-#define PTE_RW         0 /* RW means bit 7 is clear */
-
-static uint64_t *pte_lookup(uint64_t pml4_phys, uint64_t virt)
-{
-    /* AArch64 4-level walk (assumed 48-bit VA, 4KB granularity) */
-    uint64_t *pml4 = (uint64_t *)phys_to_hhdm(pml4_phys);
-    uint16_t l0_idx = (virt >> 39) & 0x1FF;
-    uint16_t l1_idx = (virt >> 30) & 0x1FF;
-    uint16_t l2_idx = (virt >> 21) & 0x1FF;
-    uint16_t l3_idx = (virt >> 12) & 0x1FF;
-
-    uint64_t l0e = pml4[l0_idx];
-    if (!(l0e & PTE_VALID)) return NULL;
-    
-    uint64_t *l1 = (uint64_t *)phys_to_hhdm(l0e & ~0xFFFULL);
-    uint64_t l1e = l1[l1_idx];
-    if (!(l1e & PTE_VALID)) return NULL; /* TODO: Handle Block mappings if any */
-
-    uint64_t *l2 = (uint64_t *)phys_to_hhdm(l1e & ~0xFFFULL);
-    uint64_t l2e = l2[l2_idx];
-    if (!(l2e & PTE_VALID)) return NULL;
-
-    uint64_t *l3 = (uint64_t *)phys_to_hhdm(l2e & ~0xFFFULL);
-    return &l3[l3_idx];
-}
-
-static inline void invlpg_page(uint64_t virt)
-{
-    __asm__ volatile("tlbi vaae1is, %0" :: "r"(virt >> 12) : "memory");
-    __asm__ volatile("dsb ish");
-    __asm__ volatile("isb");
-}
-
-static int handle_user_cow_fault(uint64_t aspace, uint64_t page)
-{
-    uint64_t *pte = pte_lookup(aspace, page);
-    if (!pte) return 0;
-    
-    uint64_t entry = *pte;
-    if (!(entry & PTE_VALID) || !(entry & PTE_COW)) return 0;
-    
-    /* Allocate new page */
-    uint64_t old_phys = entry & ~0xFFFULL; // Mask software bits too? No, usually fine.
-    // Actually we need to mask attribute bits carefully. 0000FFFFFFFFF000 usually.
-    old_phys &= 0x0000FFFFFFFFF000ULL;
-
-    uint64_t new_phys = pmm_alloc_page();
-    if (!new_phys) return 0;
-    
-    /* Copy Content */
-    uint8_t *dst = (uint8_t *)phys_to_hhdm(new_phys);
-    uint8_t *src = (uint8_t *)phys_to_hhdm(old_phys);
-    for (int i = 0; i < 4096; ++i) dst[i] = src[i];
-    
-    /* Update PTE: Set RW (clear RO), clear COW */
-    uint64_t new_entry = (entry & ~PTE_COW) & ~PTE_RO;
-    new_entry = (new_entry & ~0x0000FFFFFFFFF000ULL) | new_phys;
-    
-    *pte = new_entry;
-    invlpg_page(page);
-    return 1;
-}
-
-static uint64_t get_zero_page(void)
-{
-    static uint64_t zero_phys = 0;
-    if (zero_phys) return zero_phys;
-    
-    uint64_t phys = pmm_alloc_page();
-    if (!phys) return 0;
-    
-    uint8_t *dst = (uint8_t *)phys_to_hhdm(phys);
-    for (int i=0; i<4096; ++i) dst[i] = 0;
-    
-    zero_phys = phys;
-    return zero_phys;
-}
-
-/* Need to implement mmu_map_page_in for AArch64 */
-/* Simplified version that only handles L3 mapping, assumes tables exist or we allocate them */
-/* We can reuse existing mmu_map_page helper logic or reimplement */
-/* But 'mmu_map_page' in include/kernel/mmu.h maps to CURRENT pml4. */
+static bool hhdm_ready = false;
 
 static inline void *table_ptr(uint64_t phys)
 {
     return (void *)phys_to_hhdm(phys);
 }
 
+static inline uint64_t align_down(uint64_t value, uint64_t align)
+{
+    return value & ~(align - 1);
+}
+
+static inline uint64_t align_up(uint64_t value, uint64_t align)
+{
+    return (value + align - 1) & ~(align - 1);
+}
+
+static inline uint64_t *pml4_high(void)
+{
+    /* Access boot_pml4 via HHDM to avoid unmapping issues during section protection */
+    /* boot_pml4 is in .pgtables, which might be unmapped temporarily when splitting blocks */
+    /* virt_to_phys works because it uses arithmetic relative to HIGHER_HALF_BASE */
+    return (uint64_t *)phys_to_hhdm(virt_to_phys(boot_pml4));
+}
+
 static void zero_page(uint64_t phys)
 {
     uint64_t *ptr = (uint64_t *)table_ptr(phys);
-    for (size_t i = 0; i < 512; ++i) ptr[i] = 0;
+    for (size_t i = 0; i < 512; ++i) {
+        ptr[i] = 0;
+    }
 }
 
-static uint64_t *ensure_table(uint64_t *parent, uint16_t index, uint64_t flags)
+static uint64_t *ensure_table(uint64_t *parent, uint16_t index)
 {
-    (void)flags;
     uint64_t entry = parent[index];
     uint64_t phys;
-    /* flags usage: if user needed, we set user bit on table too */
-    /* AArch64: Table descriptors also have effect on permissions? */
-    /* Yes, PXNTable, UXNTable, APTable. Default 0 is permissive. */
     
-    if (!(entry & PTE_VALID)) {
+    if (!(entry & ARCH_PTE_VALID)) {
         phys = pmm_alloc_page();
+        if (!phys) panic("mmu: OOM in ensure_table", 0);
         zero_page(phys);
-        /* L0/L1/L2 table descriptor: Bit 1=1 (Table), Bit 0=1 (Valid) */
-        uint64_t new_entry = phys | PTE_VALID | PTE_PAGE; 
-        parent[index] = new_entry;
+        /* L0-L2 Table Descriptor: Valid | Table */
+        parent[index] = phys | ARCH_PTE_VALID | ARCH_PTE_TABLE;
     } else {
-        phys = entry & 0x0000FFFFFFFFF000ULL;
+        /* Check if it's a Block (Huge Page) - sanity check */
+        /* Table has bit 1 set. Block has bit 1 clear. */
+        if (!(entry & ARCH_PTE_TABLE)) {
+             /* It is valid but not a table -> Block. */
+             return NULL;
+        }
+        phys = entry & ~0xFFFULL;
     }
     return (uint64_t *)table_ptr(phys);
 }
 
-int mmu_map_page_in(uint64_t pml4_phys, uint64_t virt, uint64_t phys, uint64_t flags)
+static uint64_t flags_to_desc(uint64_t phys, uint64_t flags)
 {
-    /* flags are generic MMU_FLAG_* from mmu.h */
-    
-    uint64_t *pml4 = (uint64_t *)table_ptr(pml4_phys);
-    uint16_t l0 = (virt >> 39) & 0x1FF;
-    uint16_t l1 = (virt >> 30) & 0x1FF;
-    uint16_t l2 = (virt >> 21) & 0x1FF;
-    uint16_t l3 = (virt >> 12) & 0x1FF;
+    uint64_t desc = (phys & ~0xFFFULL) | ARCH_PTE_VALID | ARCH_PTE_PAGE | ARCH_PTE_AF | ARCH_PTE_SH_INNER | ARCH_PTE_ATTR_NORMAL;
 
-    uint64_t *pdpt = ensure_table(pml4, l0, flags);
-    /* Check L1 (1GB Block) */
-    uint64_t l1e = pdpt[l1];
-    if ((l1e & PTE_VALID) && !(l1e & PTE_PAGE)) {
-        /* It's a block (1GB) */
-        uint64_t block_phys = l1e & 0x0000FFFFFFFFF000ULL; // Mask attributes?
-        /* Actually block address is 30 bits aligned */
-        block_phys &= ~((1ULL << 30) - 1);
-        uint64_t offset = virt & ((1ULL << 30) - 1);
-        
-        if ((block_phys + offset) == phys) {
-            /* Already mapped correctly */
-            return 0;
-        } else {
-            /* Mapped to something else! */
-            /* TODO: Handle remap/split? Panic for now */
-            // panic("MMU: L1 Block conflict", l1e);
-            return -1;
+    if (flags & MMU_FLAG_WRITE) {
+        if (flags & MMU_FLAG_USER) desc |= ARCH_PTE_AP_RW_USER;
+        else desc |= ARCH_PTE_AP_RW_EL1;
+    } else {
+        /* Read Only */
+        if (flags & MMU_FLAG_USER) desc |= ARCH_PTE_AP_RO_USER;
+        else desc |= ARCH_PTE_AP_RO_EL1;
+    }
+    
+    if (flags & MMU_FLAG_NOEXEC) {
+        desc |= ARCH_PTE_UXN | ARCH_PTE_PXN;
+    } else {
+        /* Executable */
+        desc |= ARCH_PTE_UXN; /* Default: Kernel code, User XN */
+        if (flags & MMU_FLAG_USER) {
+            desc &= ~ARCH_PTE_UXN;
+            desc |= ARCH_PTE_PXN; /* User code, Kernel XN */
         }
     }
 
-    uint64_t *pd   = ensure_table(pdpt, l1, flags);
-    
-    /* Check L2 (2MB Block) */
-    uint64_t l2e = pd[l2];
-    if ((l2e & PTE_VALID) && !(l2e & PTE_PAGE)) {
-        /* It's a block (2MB) */
-        uint64_t block_phys = l2e & 0x0000FFFFFFFFF000ULL;
-        block_phys &= ~((1ULL << 21) - 1);
-        uint64_t offset = virt & ((1ULL << 21) - 1);
-        
-        if ((block_phys + offset) == phys) {
-            return 0;
-        } else {
-            // panic("MMU: L2 Block conflict", l2e);
-            return -1;
-        }
-    }
-
-    uint64_t *pt   = ensure_table(pd,   l2, flags);
-    
-    /* L3 Entry */
-    /* Convert generic flags to AArch64 PTE bits */
-    /* By default use Attr 1 (Normal Memory) -> Index 1 in MAIR (Bits 4:2 = 1) -> 0x4  */
-    /* If MMU_FLAG_DEVICE is set, use Attr 0 (Device) -> Index 0 in MAIR (Bits 4:2 = 0) -> 0x0 */
-    
-    uint64_t attr_idx = 1; /* Normal by default */
-    if (flags & MMU_FLAG_DEVICE) {
-        attr_idx = 0; /* Device */
+    if (!(flags & MMU_FLAG_GLOBAL)) {
+       desc |= ARCH_PTE_NG;
     }
     
-    uint64_t entry = (phys & 0x0000FFFFFFFFF000ULL) | PTE_VALID | PTE_PAGE | PTE_AF | PTE_SH_INNER;
-    entry |= (attr_idx << 2);
-    
-    if (flags & MMU_FLAG_USER) entry |= PTE_USER;
-    // Wait, MMU_FLAG_WRITE (0x2) means Writable.
-    if (!(flags & MMU_FLAG_WRITE)) entry |= PTE_RO;
-    
-    if (flags & MMU_FLAG_NOEXEC) entry |= PTE_NX | PTE_PXN;
-    if (flags & MMU_FLAG_COW) entry |= PTE_COW;
-    
-    pt[l3] = entry;
-    // No invlpg needed if we are modifying non-current or fresh mapping? 
-    // If it's current aspace, we should invalid. mmu_map_page_in is generic.
-    return 0;
+    return desc;
 }
 
-int mmu_handle_fault(uint64_t far, int flags)
+void mmu_map_page(uint64_t virt, uint64_t phys, uint64_t flags)
 {
-    /* flags: MMU_FAULT_PROTECT(1), WRITE(2), USER(4), EXEC(8) */
-    uint64_t page = far & ~0xFFFULL;
-    uint64_t aspace = sched_current_aspace();
-    if (!aspace) return 0;
+    /* Always map into Kernel TTBR1 (boot_pml4) for High Addresses */
+    /* This function is typically used for Kernel Heap, IO, etc. */
     
-    /* COW Handling */
-    /* If Write Fault (flags & 2) and Present (implied calls this?) */
-    /* Vectors.c logic: if (esr & (1<<6)) -> Write. */
-    /* If we are here, we have a fault. */
-    
-    /* We need to check if it's a COW fault. */
-    /* AArch64 Permission Fault happens if we write to RO page. */
-    if (flags & MMU_FAULT_WRITE) {
-        if (handle_user_cow_fault(aspace, page)) {
-            return 1;
-        }
+    if ((virt & 0xFFF) || (phys & 0xFFF)) {
+        panic("mmu_map_page: unaligned", virt | phys);
     }
     
-    /* Start on Demand / Stack Growth */
-    /* Check bounds */
-    uint64_t stack_low = USER_STACK_TOP - (USER_STACK_MAX_PAGES * 4096ULL);
-    if (page < stack_low || page >= USER_STACK_TOP) return 0; // Not in stack range (simplify)
+    uint64_t *pml4 = pml4_high(); /* boot_pml4 */
     
-    /* Check RSP (User SP) if available? 
-       We don't have user SP easily here unless passed.
-       vectors.c passed 'regs', but didn't pass SP. 
-       Actually SP_EL0 is available if we read it? 
-       But we are in EL1.
-    */
-    /* Simplify: Allow stack growth within range regardless of SP for now */
+    /* Indices */
+    uint16_t idx0 = (virt >> 39) & 0x1FF;
+    uint16_t idx1 = (virt >> 30) & 0x1FF;
+    uint16_t idx2 = (virt >> 21) & 0x1FF;
+    uint16_t idx3 = (virt >> 12) & 0x1FF;
+
+    uint64_t *pdpt = ensure_table(pml4, idx0);
+    if (!pdpt) panic("mmu_map_page: hit L0 block", virt);
+    uint64_t *pd   = ensure_table(pdpt, idx1);
+    if (!pd) panic("mmu_map_page: hit L1 block", virt);
+    uint64_t *pt   = ensure_table(pd,   idx2);
+    if (!pt) panic("mmu_map_page: hit L2 block", virt);
     
-    uint64_t phys = get_zero_page();
-    if (!phys) return 0;
+    pt[idx3] = flags_to_desc(phys, flags);
     
-    if (mmu_map_page_in(aspace, page, phys, MMU_FLAG_USER | MMU_FLAG_WRITE | MMU_FLAG_NOEXEC) != 0) {
-        return 0;
-    }
-    invlpg_page(page);
-    return 1;
+    arch_invlpg(virt);
+}
+
+int mmu_map_page_in(uint64_t root_phys, uint64_t virt, uint64_t phys, uint64_t flags)
+{
+    /* Used for User Mappings (TTBR0) */
+    if (!root_phys || (virt & 0xFFF) || (phys & 0xFFF)) return -1;
+
+    uint64_t *pml4 = (uint64_t *)table_ptr(root_phys);
+    
+    uint16_t idx0 = (virt >> 39) & 0x1FF;
+    uint16_t idx1 = (virt >> 30) & 0x1FF;
+    uint16_t idx2 = (virt >> 21) & 0x1FF;
+    uint16_t idx3 = (virt >> 12) & 0x1FF;
+
+    uint64_t *pdpt = ensure_table(pml4, idx0);
+    uint64_t *pd   = ensure_table(pdpt, idx1);
+    uint64_t *pt   = ensure_table(pd,   idx2);
+    
+    pt[idx3] = flags_to_desc(phys, flags);
+    return 0;
 }
 
 uint64_t mmu_create_user_pml4(void)
@@ -282,62 +153,176 @@ uint64_t mmu_create_user_pml4(void)
     uint64_t phys = pmm_alloc_page();
     if (!phys) return 0;
     zero_page(phys);
-
-    /* 
-       AArch64 Kernel uses TTBR1 for Higher Half. 
-       User Process uses TTBR0.
-       We don't need to copy kernel mappings into User PML4 (TTBR0).
-       We just return an empty (zeroed) PML4.
-    */
     return phys;
-}
-
-void mmu_map_page(uint64_t virt, uint64_t phys, uint64_t flags)
-{
-    uint64_t pml4_phys = virt_to_phys(boot_pml4);
-    mmu_map_page_in(pml4_phys, virt, phys, flags);
-}
-
-void mmu_map_hhdm_2m(uint64_t phys_start, uint64_t phys_end)
-{
-    uint64_t pml4_phys = virt_to_phys(boot_pml4);
-    
-    phys_start &= ~0x1FFFFFULL;
-    phys_end = (phys_end + 0x1FFFFF) & ~0x1FFFFFULL;
-    
-    for (uint64_t phys = phys_start; phys < phys_end; phys += 0x200000) {
-        uint64_t virt = phys_to_hhdm(phys);
-        
-        uint16_t l0 = (virt >> 39) & 0x1FF;
-        uint16_t l1 = (virt >> 30) & 0x1FF;
-        uint16_t l2 = (virt >> 21) & 0x1FF;
-        
-        uint64_t *pml4 = (uint64_t *)phys_to_hhdm(pml4_phys);
-        uint64_t *pdpt = ensure_table(pml4, l0, MMU_FLAG_WRITE|MMU_FLAG_GLOBAL);
-        
-        if ((pdpt[l1] & PTE_VALID) && !(pdpt[l1] & PTE_PAGE)) {
-            continue;
-        }
-        
-        uint64_t *pd = ensure_table(pdpt, l1, MMU_FLAG_WRITE|MMU_FLAG_GLOBAL);
-        
-        if (pd[l2] & PTE_VALID) {
-            continue;
-        }
-        
-        /* Map 2MB Block */
-        uint64_t entry = (phys & 0x0000FFFFFFFFF000ULL) | PTE_VALID | PTE_AF | PTE_SH_INNER | (1ULL << 2);
-        entry |= PTE_NX | PTE_PXN;
-        pd[l2] = entry;
-    }
 }
 
 void mmu_unmap_page(uint64_t virt)
 {
-    (void)virt;
+    /* Kernel unmap */
+    uint64_t *pml4 = pml4_high();
+    uint16_t idx0 = (virt >> 39) & 0x1FF;
+    uint16_t idx1 = (virt >> 30) & 0x1FF;
+    uint16_t idx2 = (virt >> 21) & 0x1FF;
+    uint16_t idx3 = (virt >> 12) & 0x1FF;
+    
+    if (!(pml4[idx0] & ARCH_PTE_VALID)) return;
+    uint64_t *pdpt = (uint64_t *)table_ptr(pml4[idx0] & ~0xFFFULL);
+    
+    if (!(pdpt[idx1] & ARCH_PTE_VALID)) return;
+    uint64_t *pd = (uint64_t *)table_ptr(pdpt[idx1] & ~0xFFFULL);
+    
+    if (!(pd[idx2] & ARCH_PTE_VALID)) return;
+    uint64_t *pt = (uint64_t *)table_ptr(pd[idx2] & ~0xFFFULL);
+    
+    pt[idx3] = 0;
+    arch_invlpg(virt);
 }
+
+void mmu_map_hhdm_2m(uint64_t phys_start, uint64_t phys_end)
+{
+    uint64_t start = align_down(phys_start, PAGE_SIZE_2M);
+    uint64_t end = align_up(phys_end, PAGE_SIZE_2M);
+    
+    if (start >= end) return;
+    
+    log_info_hex("HHDM map begin", start);
+    log_info_hex("HHDM map end", end);
+    
+    /* HHDM is at ARCH_HHDM_BASE in TTBR1 */
+    /* ARCH_HHDM_BASE is typically Index 256 or similar in TTBR1 */
+    /* The caller expects us to map [phys_start, phys_end] to HHDM+phys_start */
+    
+    /* We need to ensure PGD[HHDM_INDEX] exists */
+    uint64_t *pml4 = pml4_high();
+    
+    /* We iterate phys addresses */
+    for (uint64_t p = start; p < end; p += PAGE_SIZE_2M) {
+        uint64_t v = phys_to_hhdm(p);
+        
+        uint16_t idx0 = (v >> 39) & 0x1FF;
+        uint16_t idx1 = (v >> 30) & 0x1FF;
+        uint16_t idx2 = (v >> 21) & 0x1FF;
+        
+        uint64_t *pdpt = ensure_table(pml4, idx0);
+        if (!pdpt) {
+            /* L0 Block? Valid but weird. */
+            p = (p & ~((1ULL << 39) - 1)) + (1ULL << 39) - PAGE_SIZE_2M;
+            continue;
+        }
+        
+        uint64_t *pd = ensure_table(pdpt, idx1);
+        if (!pd) {
+            /* L1 Block (1GB). Already mapped. Skip. */
+            /* Align p to next 1GB boundary */
+            /* (p | 1GB_MASK) + 1 -> Next 1GB */
+            /* But we are in a loop p += 2MB */
+            /* So set p to (Current 1GB End) - 2MB */
+            uint64_t current_1gb_end = (p & ~((1ULL << 30) - 1)) + (1ULL << 30);
+            p = current_1gb_end - PAGE_SIZE_2M; 
+            continue;
+        }
+        
+        /* L2 Block Descriptor */
+        /* Valid | AF | SH_INNER | ATTR_NORMAL | RW_EL1 | UXN | PXN */
+        /* Bit 1 (Table) must be 0 for Block */
+        uint64_t desc = (p & ~0xFFFULL) | ARCH_PTE_VALID | ARCH_PTE_AF | ARCH_PTE_SH_INNER | ARCH_PTE_ATTR_NORMAL;
+        desc |= ARCH_PTE_AP_RW_EL1; 
+        desc |= ARCH_PTE_UXN | ARCH_PTE_PXN; /* No exec data */
+        
+        /* Ensure Block bit (bit 1) is 0. ARCH_PTE_VALID is 1. */
+        /* So desc & 3 == 1. Correct. */
+        pd[idx2] = desc;
+    }
+    
+    arch_mmu_flush_tlb();
+    hhdm_ready = true;
+}
+
+static inline uint64_t align_down_4k(uint64_t value) { return value & ~0xFFFULL; }
+static inline uint64_t align_up_4k(uint64_t value) { return (value + 0xFFFULL) & ~0xFFFULL; }
 
 void mmu_protect_kernel_sections(void)
 {
-    /* Pending implementation */
+    /* Remap .text as RX, .rodata as R, .data/.bss as RW */
+    extern char _text_start, _text_end;
+    extern char _rodata_start, _rodata_end;
+    extern char _data_start, _data_end;
+    extern char _bss_start, _bss_end;
+    
+    const uint64_t text_start = virt_to_phys(&_text_start);
+    const uint64_t text_end = virt_to_phys(&_text_end);
+    const uint64_t rodata_start = virt_to_phys(&_rodata_start);
+    const uint64_t rodata_end = virt_to_phys(&_rodata_end);
+    const uint64_t data_start = virt_to_phys(&_data_start);
+    const uint64_t data_end = virt_to_phys(&_data_end);
+    const uint64_t bss_start = virt_to_phys(&_bss_start);
+    const uint64_t bss_end = virt_to_phys(&_bss_end);
+    
+    uint64_t text_flags = MMU_FLAG_GLOBAL; /* Exec, RO */
+    uint64_t ro_flags = MMU_FLAG_GLOBAL | MMU_FLAG_NOEXEC; /* RO, NX */
+    uint64_t data_flags = MMU_FLAG_GLOBAL | MMU_FLAG_WRITE | MMU_FLAG_NOEXEC; /* RW, NX */
+    
+    for (uint64_t p = align_down_4k(text_start); p < align_up_4k(text_end); p += 4096) {
+        mmu_map_page(phys_to_higher_half(p), p, text_flags);
+    }
+    for (uint64_t p = align_down_4k(rodata_start); p < align_up_4k(rodata_end); p += 4096) {
+        mmu_map_page(phys_to_higher_half(p), p, ro_flags);
+    }
+    for (uint64_t p = align_down_4k(data_start); p < align_up_4k(data_end); p += 4096) {
+        mmu_map_page(phys_to_higher_half(p), p, data_flags);
+    }
+    for (uint64_t p = align_down_4k(bss_start); p < align_up_4k(bss_end); p += 4096) {
+        mmu_map_page(phys_to_higher_half(p), p, data_flags);
+    }
+    
+    /* Map everything else up to _kernel_end (pgtables, stack) as RW/NX */
+    extern char _kernel_end;
+    const uint64_t kernel_end = virt_to_phys(&_kernel_end);
+    for (uint64_t p = align_up_4k(bss_end); p < align_up_4k(kernel_end); p += 4096) {
+        mmu_map_page(phys_to_higher_half(p), p, data_flags);
+    }
+    
+    arch_mmu_flush_tlb();
+    log_info("Kernel sections protected (AArch64)");
+}
+
+
+
+
+void arch_flush_cache(const void *virt, uint64_t size)
+{
+    uint64_t addr = (uint64_t)virt;
+    uint64_t end = addr + size;
+    
+    /* Read Cache Type Register to get line sizes */
+    uint64_t ctr;
+    __asm__ volatile("mrs %0, ctr_el0" : "=r"(ctr));
+    
+    /* D-Cache Line Size: bits [19:16] is LOG2(words). Words = 4 bytes.
+       Line size = 4 << (ctr >> 16 & 0xF) */
+    uint32_t d_line_size = 4 << ((ctr >> 16) & 0xF);
+    
+    /* Clean Data Cache by VA to PoU */
+    uint64_t p = addr & ~(d_line_size - 1);
+    while (p < end) {
+        __asm__ volatile("dc cvau, %0" : : "r"(p));
+        p += d_line_size;
+    }
+    
+    __asm__ volatile("dsb ish");
+    
+    /* Invalidate I-Cache (All) - simpler than iterating by VA and safer for VIPT/PIPT nuances with aliases */
+    __asm__ volatile("ic ialluis");
+    
+    __asm__ volatile("dsb ish");
+    __asm__ volatile("isb");
+}
+
+int mmu_handle_fault(uint64_t addr, int flags)
+{
+    log_info_hex("MMU Fault Address", addr);
+    log_info_hex("MMU Fault Flags", (uint64_t)flags);
+    log_error("Page Fault Detected");
+    panic("Page Fault", addr);
+    return 0;
 }

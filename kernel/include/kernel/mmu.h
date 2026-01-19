@@ -20,7 +20,11 @@
 #define MMU_FAULT_EXEC    0x8
 
 /* Handle a page fault given the fault address (CR2/FAR) and error flags. Returns 1 if handled, 0 otherwise. */
+/* Handle a page fault given the fault address (CR2/FAR) and error flags. Returns 1 if handled, 0 otherwise. */
 int mmu_handle_fault(uint64_t addr, int flags);
+
+/* Flush instruction and data cache for a virtual address range (for self-modifying code or loading execs) */
+void arch_flush_cache(const void *virt, uint64_t size);
 
 static inline uint64_t phys_to_higher_half(uint64_t phys)
 {
@@ -32,16 +36,6 @@ static inline uint64_t higher_half_to_phys(uint64_t virt)
     return virt - HIGHER_HALF_BASE;
 }
 
-static inline void *phys_to_virt(uint64_t phys)
-{
-    return (void *)phys_to_higher_half(phys);
-}
-
-static inline uint64_t virt_to_phys(const void *virt)
-{
-    return higher_half_to_phys((uint64_t)virt);
-}
-
 static inline uint64_t phys_to_hhdm(uint64_t phys)
 {
     return phys + HHDM_BASE;
@@ -50,6 +44,23 @@ static inline uint64_t phys_to_hhdm(uint64_t phys)
 static inline uint64_t hhdm_to_phys(uint64_t virt)
 {
     return virt - HHDM_BASE;
+}
+
+static inline void *phys_to_virt(uint64_t phys)
+{
+    return (void *)phys_to_higher_half(phys);
+}
+
+static inline uint64_t virt_to_phys(const void *virt)
+{
+    uint64_t v = (uint64_t)virt;
+    if (v >= HHDM_BASE) {
+        return hhdm_to_phys(v);
+    }
+    /* Kernel Image (High VMA) -> Physical RAM (Low LMA with 0x40000000 base) */
+    /* VMA Base: 0xFFFFFFFF80080000, LMA Base: 0x40080000 */
+    /* Diff: 0xFFFFFFFF80000000 maps to 0x40000000 */
+    return higher_half_to_phys(v) + ARCH_PHYS_BASE;
 }
 
 /* Map physical range into the HHDM using 2 MiB pages. */

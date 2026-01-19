@@ -25,3 +25,4 @@ static inline void arch_invlpg(uint64_t virt)
 {
     __asm__ volatile("invlpg (%0)" ::"r"(virt) : "memory");
 }
+#define ARCH_PHYS_BASE 0x0ULL

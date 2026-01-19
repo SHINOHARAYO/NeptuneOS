@@ -38,9 +38,16 @@ __attribute__((used)) static void start_main(uint64_t *sp)
 
 __attribute__((naked)) void _start(void)
 {
+#ifdef __aarch64__
+    __asm__ volatile(
+        "mov x0, sp\n"
+        "bl start_main\n"
+        "b .\n");
+#else
     __asm__ volatile(
         "mov %rsp, %rdi\n"
         "andq $-16, %rsp\n"
         "call start_main\n"
         "hlt\n");
+#endif
 }

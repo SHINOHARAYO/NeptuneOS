@@ -43,13 +43,18 @@ static inline void arch_icode_sync(void *addr, size_t len)
 {
     uintptr_t start = (uintptr_t)addr;
     uintptr_t end = start + len;
-    /* Clean D-cache and Invalidate I-cache */
+    /* Clean D-cache by VA to PoU */
     /* Assume min cache line 64 bytes */
-    start &= ~63ULL;
-    for (uintptr_t p = start; p < end; p += 64) {
+    uintptr_t d_start = (uintptr_t)addr & ~63ULL;
+    for (uintptr_t p = d_start; p < end; p += 64) {
         __asm__ volatile("dc cvau, %0" : : "r"(p) : "memory");
-        __asm__ volatile("ic ivau, %0" : : "r"(p) : "memory");
     }
-    __asm__ volatile("dsb ish");
-    __asm__ volatile("isb");
+    __asm__ volatile("dsb ish"); /* Ensure D-cache clean completes */
+    
+    /* Invalidate I-cache (All Inner Shareable) */
+    /* Safer than ivau for VIPT caches across mappings */
+    __asm__ volatile("ic ialluis");
+    
+    __asm__ volatile("dsb ish"); /* Ensure I-cache invalidation completes */
+    __asm__ volatile("isb");     /* Context synchronization */
 }
